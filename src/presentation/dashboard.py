@@ -4,6 +4,8 @@ from datetime import datetime
 import time
 from domain.blink_detector import BlinkDetector
 from domain.ear_calculator import get_eye_state
+from domain.perclos_calculator import PerclosCalculator, ProlongedClosureDetector
+from domain.metrics import EyeState
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None):
@@ -13,6 +15,10 @@ class DashboardWidget(QWidget):
         self.camera_service = camera_service
         self.face_analyzer = face_analyzer
         self.blink_detector = BlinkDetector()
+        self.perclos_calc = PerclosCalculator()
+        self.prolonged_detector = ProlongedClosureDetector()
+        self._last_frame_time: float = 0.0
+        self._last_state = EyeState.UNKNOWN
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
@@ -146,6 +152,27 @@ class DashboardWidget(QWidget):
         self.lbl_bpm = QLabel("BPM: 0.0")
         self.lbl_bpm.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
         metrics_layout.addWidget(self.lbl_bpm)
+        
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setStyleSheet("color: #dcdde1;")
+        metrics_layout.addWidget(separator)
+        
+        self.lbl_perclos_60s = QLabel("PERCLOS 1min: ---")
+        self.lbl_perclos_60s.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_perclos_60s)
+        
+        self.lbl_perclos_5min = QLabel("PERCLOS 5min: ---")
+        self.lbl_perclos_5min.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_perclos_5min)
+        
+        self.lbl_prolonged_count = QLabel("Cierres prolongados: 0")
+        self.lbl_prolonged_count.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_prolonged_count)
+        
+        self.lbl_closure_duration = QLabel("Cierre actual: 0.0s")
+        self.lbl_closure_duration.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_closure_duration)
         
         self.metrics_container.setVisible(False)
         status_layout.addWidget(self.metrics_container)
@@ -396,6 +423,10 @@ class DashboardWidget(QWidget):
         try:
             self.session_service.start_session()
             self.blink_detector.reset()
+            self.perclos_calc.reset()
+            self.prolonged_detector.reset()
+            self._last_frame_time = 0.0
+            self._last_state = EyeState.UNKNOWN
             self.timer.start(1000)
             
             if self.camera_service:
@@ -487,6 +518,29 @@ class DashboardWidget(QWidget):
                 
                 self.lbl_blinks.setText(f"Parpadeos: {blink_metrics.total_blinks}")
                 self.lbl_bpm.setText(f"BPM: {blink_metrics.blinks_per_minute:.1f}")
+                
+                # Alimentar PERCLOS y cierre prolongado con duración del intervalo
+                if self._last_frame_time > 0 and eye_metrics.state != EyeState.UNKNOWN:
+                    interval = current_time - self._last_frame_time
+                    self.perclos_calc.add_event(current_time, eye_metrics.state, interval)
+                    
+                self._last_frame_time = current_time
+                self._last_state = eye_metrics.state
+                self.prolonged_detector.process_state(eye_metrics.state, current_time)
+                
+                # Actualizar labels de PERCLOS
+                perclos = self.perclos_calc.get_perclos(current_time)
+                self.lbl_perclos_60s.setText(
+                    f"PERCLOS 1min: {perclos.perclos_60s*100:.1f}%" if perclos.perclos_60s is not None else "PERCLOS 1min: ---"
+                )
+                self.lbl_perclos_5min.setText(
+                    f"PERCLOS 5min: {perclos.perclos_5min*100:.1f}%" if perclos.perclos_5min is not None else "PERCLOS 5min: ---"
+                )
+                
+                # Actualizar cierres prolongados
+                closure_result = self.prolonged_detector.get_result(current_time)
+                self.lbl_prolonged_count.setText(f"Cierres prolongados: {closure_result.count}")
+                self.lbl_closure_duration.setText(f"Cierre actual: {closure_result.current_duration:.1f}s")
                     
             from PySide6.QtGui import QImage, QPixmap
             h, w, ch = frame_rgb.shape
