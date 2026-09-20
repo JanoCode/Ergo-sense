@@ -3,13 +3,17 @@ from PySide6.QtCore import Qt, QTimer
 from datetime import datetime
 
 class DashboardWidget(QWidget):
-    def __init__(self, user_service=None, session_service=None):
+    def __init__(self, user_service=None, session_service=None, camera_service=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
+        self.camera_service = camera_service
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
+        
+        self.camera_timer = QTimer(self)
+        self.camera_timer.timeout.connect(self._update_frame)
         
         self._setup_ui()
         self._load_users()
@@ -105,6 +109,13 @@ class DashboardWidget(QWidget):
         btn_action_layout.addWidget(self.btn_start_session)
         btn_action_layout.addWidget(self.btn_end_session)
         status_layout.addLayout(btn_action_layout)
+        
+        self.lbl_video = QLabel("Cámara inactiva")
+        self.lbl_video.setStyleSheet("background-color: #ecf0f1; border-radius: 8px; color: #7f8c8d; font-weight: bold;")
+        self.lbl_video.setAlignment(Qt.AlignCenter)
+        self.lbl_video.setMinimumSize(320, 240)
+        self.lbl_video.setVisible(False)
+        status_layout.addWidget(self.lbl_video)
         
         left_column.addWidget(status_panel)
         
@@ -352,6 +363,14 @@ class DashboardWidget(QWidget):
         try:
             self.session_service.start_session()
             self.timer.start(1000)
+            
+            if self.camera_service:
+                if self.camera_service.start():
+                    self.lbl_video.setVisible(True)
+                    self.camera_timer.start(33) # ~30 fps
+                else:
+                    QMessageBox.warning(self, "Cámara no disponible", "No se pudo iniciar la cámara. La sesión continuará sin video.")
+                    
             self._update_session_ui_state()
         except Exception as e:
             QMessageBox.warning(self, "Error al iniciar", str(e))
@@ -362,6 +381,13 @@ class DashboardWidget(QWidget):
         try:
             self.session_service.end_session()
             self.timer.stop()
+            
+            if self.camera_service:
+                self.camera_service.stop()
+                self.camera_timer.stop()
+                self.lbl_video.setVisible(False)
+                self.lbl_video.setText("Cámara inactiva")
+                
             self._update_session_ui_state()
             self._load_history()
         except Exception as e:
@@ -396,3 +422,16 @@ class DashboardWidget(QWidget):
             hours, remainder = divmod(total_seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             self.lbl_elapsed.setText(f"Transcurrido: {hours:02d}:{minutes:02d}:{seconds:02d}")
+
+    def _update_frame(self):
+        if not self.camera_service or not self.camera_service.is_running():
+            return
+            
+        frame = self.camera_service.get_frame()
+        if frame is not None:
+            from PySide6.QtGui import QImage, QPixmap
+            h, w, ch = frame.shape
+            bytes_per_line = ch * w
+            qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            self.lbl_video.setPixmap(pixmap.scaled(self.lbl_video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))

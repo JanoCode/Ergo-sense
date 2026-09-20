@@ -2,9 +2,10 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout
 from presentation.dashboard import DashboardWidget
 
 class MainWindow(QMainWindow):
-    def __init__(self, user_service=None, session_service=None):
+    def __init__(self, user_service=None, session_service=None, camera_service=None):
         super().__init__()
         
+        self.camera_service = camera_service
         self.setWindowTitle("ErgoSense - Monitoreo de Fatiga")
         self.resize(1024, 768)
         
@@ -17,5 +18,10 @@ class MainWindow(QMainWindow):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         
         # Cargar vista inicial (Dashboard)
-        self.dashboard = DashboardWidget(user_service, session_service)
+        self.dashboard = DashboardWidget(user_service, session_service, camera_service)
         self.main_layout.addWidget(self.dashboard)
+
+    def closeEvent(self, event):
+        if self.camera_service:
+            self.camera_service.stop()
+        super().closeEvent(event)
