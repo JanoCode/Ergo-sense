@@ -53,5 +53,14 @@ class TestUserService(unittest.TestCase):
         self.assertEqual(users[0].name, "User A")
         self.assertEqual(users[1].name, "User B")
 
+    def test_active_user(self):
+        user = self.service.create_user("User A")
+        self.assertIsNone(self.service.get_active_user())
+        
+        self.service.set_active_user(user)
+        active = self.service.get_active_user()
+        self.assertIsNotNone(active)
+        self.assertEqual(active.name, "User A")
+
 if __name__ == '__main__':
     unittest.main()

@@ -7,6 +7,7 @@ class DashboardWidget(QWidget):
         self.user_service = user_service
         self._setup_ui()
         self._load_users()
+        self._update_active_user_display()
         
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -35,6 +36,12 @@ class DashboardWidget(QWidget):
         status_panel.setStyleSheet("background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;")
         status_layout = QVBoxLayout(status_panel)
         status_layout.setContentsMargins(20, 20, 20, 20)
+        
+        self.lbl_active_user = QLabel("No hay usuario activo")
+        self.lbl_active_user.setStyleSheet("font-size: 16px; font-weight: bold; color: #e74c3c; border: none;")
+        status_layout.addWidget(self.lbl_active_user)
+        
+        status_layout.addSpacing(10)
         
         status_title = QLabel("Estado de Monitoreo")
         status_title.setStyleSheet("font-size: 18px; font-weight: bold; border: none;")
@@ -169,9 +176,11 @@ class DashboardWidget(QWidget):
     def _create_user_widget(self, user):
         widget = QFrame()
         widget.setStyleSheet("background-color: white; border-radius: 4px; padding: 8px; border: 1px solid #dcdde1;")
-        layout = QVBoxLayout(widget)
+        layout = QHBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(2)
+        
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(2)
         
         name_lbl = QLabel(user.name)
         name_lbl.setStyleSheet("font-weight: bold; font-size: 14px; border: none;")
@@ -179,8 +188,29 @@ class DashboardWidget(QWidget):
         date_lbl = QLabel(f"Creado: {user.created_at}")
         date_lbl.setStyleSheet("color: #7f8c8d; font-size: 12px; border: none;")
         
-        layout.addWidget(name_lbl)
-        layout.addWidget(date_lbl)
+        info_layout.addWidget(name_lbl)
+        info_layout.addWidget(date_lbl)
+        
+        layout.addLayout(info_layout)
+        layout.addStretch()
+        
+        btn_select = QPushButton("Seleccionar")
+        btn_select.setStyleSheet("""
+            QPushButton {
+                background-color: #f39c12;
+                color: white;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 10px;
+            }
+            QPushButton:hover {
+                background-color: #e67e22;
+            }
+        """)
+        btn_select.clicked.connect(lambda _, u=user: self._select_user(u))
+        layout.addWidget(btn_select)
+        
         return widget
 
     def _show_create_user_dialog(self):
@@ -191,3 +221,20 @@ class DashboardWidget(QWidget):
         dialog = CreateUserDialog(self.user_service, self)
         if dialog.exec():
             self._load_users()
+
+    def _select_user(self, user):
+        if self.user_service:
+            self.user_service.set_active_user(user)
+            self._update_active_user_display()
+
+    def _update_active_user_display(self):
+        if not self.user_service:
+            return
+        
+        active_user = self.user_service.get_active_user()
+        if active_user:
+            self.lbl_active_user.setText(f"Usuario activo: {active_user.name}")
+            self.lbl_active_user.setStyleSheet("font-size: 16px; font-weight: bold; color: #27ae60; border: none;")
+        else:
+            self.lbl_active_user.setText("No hay usuario activo")
+            self.lbl_active_user.setStyleSheet("font-size: 16px; font-weight: bold; color: #e74c3c; border: none;")
