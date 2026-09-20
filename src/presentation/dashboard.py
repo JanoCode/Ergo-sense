@@ -6,6 +6,9 @@ from domain.blink_detector import BlinkDetector
 from domain.ear_calculator import get_eye_state
 from domain.perclos_calculator import PerclosCalculator, ProlongedClosureDetector
 from domain.metrics import EyeState
+from domain.mar_calculator import get_mouth_state
+from domain.yawn_detector import YawnDetector
+from domain.head_pose_estimator import HeadPoseEstimator
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None):
@@ -17,8 +20,12 @@ class DashboardWidget(QWidget):
         self.blink_detector = BlinkDetector()
         self.perclos_calc = PerclosCalculator()
         self.prolonged_detector = ProlongedClosureDetector()
+        self.yawn_detector = YawnDetector()
+        self.head_pose_estimator = HeadPoseEstimator()
         self._last_frame_time: float = 0.0
         self._last_state = EyeState.UNKNOWN
+        self._frame_width = 640
+        self._frame_height = 480
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
@@ -173,6 +180,40 @@ class DashboardWidget(QWidget):
         self.lbl_closure_duration = QLabel("Cierre actual: 0.0s")
         self.lbl_closure_duration.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
         metrics_layout.addWidget(self.lbl_closure_duration)
+        
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setStyleSheet("color: #dcdde1;")
+        metrics_layout.addWidget(sep2)
+        
+        self.lbl_mar = QLabel("MAR: ---")
+        self.lbl_mar.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_mar)
+        
+        self.lbl_yawns = QLabel("Bostezos: 0")
+        self.lbl_yawns.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_yawns)
+        
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.HLine)
+        sep3.setStyleSheet("color: #dcdde1;")
+        metrics_layout.addWidget(sep3)
+        
+        self.lbl_pitch = QLabel("Pitch: ---")
+        self.lbl_pitch.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_pitch)
+        
+        self.lbl_yaw = QLabel("Yaw: ---")
+        self.lbl_yaw.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_yaw)
+        
+        self.lbl_roll = QLabel("Roll: ---")
+        self.lbl_roll.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_roll)
+        
+        self.lbl_head_dev = QLabel("Desviación: ---")
+        self.lbl_head_dev.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_head_dev)
         
         self.metrics_container.setVisible(False)
         status_layout.addWidget(self.metrics_container)
@@ -422,9 +463,12 @@ class DashboardWidget(QWidget):
             return
         try:
             self.session_service.start_session()
+            current_session_start = time.time()
             self.blink_detector.reset()
             self.perclos_calc.reset()
             self.prolonged_detector.reset()
+            self.yawn_detector.reset(session_start=current_session_start)
+            self.head_pose_estimator.reset()
             self._last_frame_time = 0.0
             self._last_state = EyeState.UNKNOWN
             self.timer.start(1000)
@@ -541,6 +585,37 @@ class DashboardWidget(QWidget):
                 closure_result = self.prolonged_detector.get_result(current_time)
                 self.lbl_prolonged_count.setText(f"Cierres prolongados: {closure_result.count}")
                 self.lbl_closure_duration.setText(f"Cierre actual: {closure_result.current_duration:.1f}s")
+                
+                # MAR y bostezos
+                landmarks_for_mouth = result if result else None
+                mar_val, mouth_state = get_mouth_state(landmarks_for_mouth)
+                self.yawn_detector.process_state(mouth_state, current_time)
+                yawn_metrics = self.yawn_detector.get_metrics(current_time)
+                self.lbl_mar.setText(f"MAR: {mar_val:.3f}" if mar_val is not None else "MAR: ---")
+                self.lbl_yawns.setText(f"Bostezos: {yawn_metrics.total_yawns}")
+                
+                # Postura de cabeza
+                h_frame, w_frame = frame_rgb.shape[:2]
+                head_result = self.head_pose_estimator.process(
+                    result, w_frame, h_frame, current_time
+                )
+                if head_result.angles:
+                    a = head_result.angles
+                    self.lbl_pitch.setText(f"Pitch: {a.pitch:.1f}°")
+                    self.lbl_yaw.setText(f"Yaw: {a.yaw:.1f}°")
+                    self.lbl_roll.setText(f"Roll: {a.roll:.1f}°")
+                    if head_result.deviation_from_reference:
+                        import math
+                        d = head_result.deviation_from_reference
+                        dev_mag = math.sqrt(d.pitch**2 + d.yaw**2 + d.roll**2)
+                        self.lbl_head_dev.setText(f"Desviación: {dev_mag:.1f}°")
+                    elif not head_result.has_reference:
+                        self.lbl_head_dev.setText("Desviación: calibrando...")
+                else:
+                    self.lbl_pitch.setText("Pitch: ---")
+                    self.lbl_yaw.setText("Yaw: ---")
+                    self.lbl_roll.setText("Roll: ---")
+                    self.lbl_head_dev.setText("Desviación: ---")
                     
             from PySide6.QtGui import QImage, QPixmap
             h, w, ch = frame_rgb.shape
