@@ -70,9 +70,30 @@ class DashboardWidget(QWidget):
         users_layout = QVBoxLayout(users_panel)
         users_layout.setContentsMargins(20, 20, 20, 20)
         
+        users_title_layout = QHBoxLayout()
         users_title = QLabel("Usuarios Registrados")
         users_title.setStyleSheet("font-size: 18px; font-weight: bold; border: none;")
-        users_layout.addWidget(users_title)
+        users_title_layout.addWidget(users_title)
+        users_title_layout.addStretch()
+        
+        self.btn_create_user = QPushButton("Crear usuario")
+        self.btn_create_user.setStyleSheet("""
+            QPushButton {
+                background-color: #2ecc71;
+                color: white;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 10px;
+            }
+            QPushButton:hover {
+                background-color: #27ae60;
+            }
+        """)
+        self.btn_create_user.clicked.connect(self._show_create_user_dialog)
+        users_title_layout.addWidget(self.btn_create_user)
+        
+        users_layout.addLayout(users_title_layout)
         
         # Scroll area para los usuarios
         self.users_scroll = QScrollArea()
@@ -161,3 +182,12 @@ class DashboardWidget(QWidget):
         layout.addWidget(name_lbl)
         layout.addWidget(date_lbl)
         return widget
+
+    def _show_create_user_dialog(self):
+        from presentation.user_dialog import CreateUserDialog
+        if not self.user_service:
+            return
+            
+        dialog = CreateUserDialog(self.user_service, self)
+        if dialog.exec():
+            self._load_users()
