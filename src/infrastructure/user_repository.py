@@ -1,3 +1,4 @@
+from typing import List
 from domain.user import User
 
 class SQLiteUserRepository:
@@ -23,3 +24,16 @@ class SQLiteUserRepository:
                 name=row["name"],
                 created_at=row["created_at"]
             )
+
+    def get_all(self) -> List[User]:
+        users = []
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, created_at FROM users ORDER BY created_at DESC")
+            for row in cursor.fetchall():
+                users.append(User(
+                    id=row["id"],
+                    name=row["name"],
+                    created_at=row["created_at"]
+                ))
+        return users

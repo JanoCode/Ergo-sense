@@ -18,6 +18,9 @@ class MockUserRepository:
         self.users.append(user)
         self.current_id += 1
         return user
+        
+    def get_all(self):
+        return self.users
 
 class TestUserService(unittest.TestCase):
     def setUp(self):
@@ -41,6 +44,14 @@ class TestUserService(unittest.TestCase):
     def test_create_user_none(self):
         with self.assertRaises(ValueError):
             self.service.create_user(None)
+            
+    def test_get_all_users(self):
+        self.service.create_user("User A")
+        self.service.create_user("User B")
+        users = self.service.get_all_users()
+        self.assertEqual(len(users), 2)
+        self.assertEqual(users[0].name, "User A")
+        self.assertEqual(users[1].name, "User B")
 
 if __name__ == '__main__':
     unittest.main()

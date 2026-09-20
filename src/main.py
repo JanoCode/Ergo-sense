@@ -7,18 +7,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PySide6.QtWidgets import QApplication
 from presentation.main_window import MainWindow
 from infrastructure.database import DatabaseManager
+from infrastructure.user_repository import SQLiteUserRepository
+from application.user_service import UserService
 
 def main():
     # Inicializar la base de datos al arrancar
     db_manager = DatabaseManager()
     db_manager.initialize_database()
+    
+    # Preparar dependencias
+    user_repo = SQLiteUserRepository(db_manager)
+    user_service = UserService(user_repo)
 
     app = QApplication(sys.path)
     
     # Configuración global de la aplicación
     app.setApplicationName("ErgoSense")
     
-    window = MainWindow()
+    window = MainWindow(user_service)
     window.show()
     
     sys.exit(app.exec())

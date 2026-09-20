@@ -12,6 +12,9 @@ class TestUserRepository(unittest.TestCase):
     def setUp(self):
         # Usar base de datos en memoria para los tests
         self.db = DatabaseManager(":memory:")
+        # Limpiar BD si es compartida
+        with self.db.get_connection() as conn:
+            conn.execute("DROP TABLE IF EXISTS users")
         self.db.initialize_database()
         self.repo = SQLiteUserRepository(self.db)
 
@@ -29,6 +32,13 @@ class TestUserRepository(unittest.TestCase):
             cursor.execute("SELECT COUNT(*) as count FROM users")
             count = cursor.fetchone()["count"]
             self.assertEqual(count, 1)
+
+    def test_get_all_users(self):
+        self.repo.save(User(name="User 1"))
+        self.repo.save(User(name="User 2"))
+        
+        users = self.repo.get_all()
+        self.assertEqual(len(users), 2)
 
 if __name__ == '__main__':
     unittest.main()

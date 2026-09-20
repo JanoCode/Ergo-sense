@@ -1,3 +1,4 @@
+from typing import List
 from domain.user import User
 
 class UserService:
@@ -14,3 +15,6 @@ class UserService:
 
         user = User(name=clean_name)
         return self.user_repository.save(user)
+
+    def get_all_users(self) -> List[User]:
+        return self.user_repository.get_all()
