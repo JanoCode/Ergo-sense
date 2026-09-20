@@ -24,3 +24,24 @@ class SQLiteSessionRepository:
                 )
             conn.commit()
             return session
+
+    def get_by_user_id(self, user_id: int) -> List[Session]:
+        sessions = []
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, user_id, started_at, ended_at, duration_seconds FROM sessions WHERE user_id = ? ORDER BY started_at DESC",
+                (user_id,)
+            )
+            for row in cursor.fetchall():
+                started_at = datetime.fromisoformat(row["started_at"]) if row["started_at"] else None
+                ended_at = datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None
+                
+                sessions.append(Session(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    duration_seconds=row["duration_seconds"]
+                ))
+        return sessions

@@ -164,17 +164,23 @@ class DashboardWidget(QWidget):
         history_layout = QVBoxLayout(history_panel)
         history_layout.setContentsMargins(20, 20, 20, 20)
         
-        history_title = QLabel("Historial (Próximamente)")
+        history_title = QLabel("Historial de Sesiones")
         history_title.setStyleSheet("font-size: 18px; font-weight: bold; border: none;")
         history_layout.addWidget(history_title)
         
-        empty_history_lbl = QLabel("No hay datos históricos disponibles.")
-        empty_history_lbl.setStyleSheet("color: #95a5a6; font-style: italic; border: none;")
-        empty_history_lbl.setAlignment(Qt.AlignCenter)
+        self.history_scroll = QScrollArea()
+        self.history_scroll.setWidgetResizable(True)
+        self.history_scroll.setStyleSheet("border: none; background-color: transparent;")
         
-        history_layout.addStretch()
-        history_layout.addWidget(empty_history_lbl)
-        history_layout.addStretch()
+        self.history_container = QWidget()
+        self.history_container.setStyleSheet("background-color: transparent;")
+        self.history_list_layout = QVBoxLayout(self.history_container)
+        self.history_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.history_list_layout.setSpacing(10)
+        self.history_list_layout.addStretch() # Mantener siempre al fondo
+        
+        self.history_scroll.setWidget(self.history_container)
+        history_layout.addWidget(self.history_scroll)
         
         # Añadir paneles al layout central
         central_layout.addLayout(left_column, 1) # Proporción 1
@@ -278,6 +284,67 @@ class DashboardWidget(QWidget):
             self.lbl_active_user.setStyleSheet("font-size: 16px; font-weight: bold; color: #e74c3c; border: none;")
             
         self._update_session_ui_state()
+        self._load_history()
+
+    def _load_history(self):
+        while self.history_list_layout.count() > 1:
+            item = self.history_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+        active_user = self.user_service.get_active_user() if self.user_service else None
+        
+        if not active_user or not self.session_service:
+            self._show_empty_history_message("No hay usuario activo.")
+            return
+            
+        try:
+            sessions = self.session_service.get_user_sessions(active_user.id)
+            if not sessions:
+                self._show_empty_history_message("No hay sesiones registradas.")
+            else:
+                for session in sessions:
+                    session_widget = self._create_session_widget(session)
+                    self.history_list_layout.insertWidget(self.history_list_layout.count() - 1, session_widget)
+        except Exception as e:
+            self._show_empty_history_message()
+
+    def _show_empty_history_message(self, message="No hay sesiones registradas."):
+        empty_lbl = QLabel(message)
+        empty_lbl.setStyleSheet("color: #95a5a6; font-style: italic; border: none; padding: 10px;")
+        empty_lbl.setAlignment(Qt.AlignCenter)
+        self.history_list_layout.insertWidget(0, empty_lbl)
+
+    def _create_session_widget(self, session):
+        widget = QFrame()
+        widget.setStyleSheet("background-color: white; border-radius: 4px; padding: 10px; border: 1px solid #dcdde1;")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)
+        
+        # Fecha
+        date_str = session.started_at.strftime('%d/%m/%Y') if session.started_at else 'Desconocida'
+        date_lbl = QLabel(f"Fecha: {date_str}")
+        date_lbl.setStyleSheet("font-weight: bold; font-size: 14px; border: none;")
+        
+        # Horas
+        start_str = session.started_at.strftime('%H:%M:%S') if session.started_at else '...'
+        end_str = session.ended_at.strftime('%H:%M:%S') if session.ended_at else 'En progreso'
+        time_lbl = QLabel(f"Horario: {start_str} - {end_str}")
+        time_lbl.setStyleSheet("color: #34495e; font-size: 13px; border: none;")
+        
+        # Duración
+        duration_lbl = QLabel("Duración: ---")
+        if session.duration_seconds is not None:
+            hours, remainder = divmod(session.duration_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            duration_lbl.setText(f"Duración: {hours:02d}:{minutes:02d}:{seconds:02d}")
+        duration_lbl.setStyleSheet("color: #7f8c8d; font-size: 13px; border: none;")
+        
+        layout.addWidget(date_lbl)
+        layout.addWidget(time_lbl)
+        layout.addWidget(duration_lbl)
+        return widget
 
     def _start_session(self):
         if not self.session_service:
@@ -296,6 +363,7 @@ class DashboardWidget(QWidget):
             self.session_service.end_session()
             self.timer.stop()
             self._update_session_ui_state()
+            self._load_history()
         except Exception as e:
             QMessageBox.warning(self, "Error al finalizar", str(e))
             

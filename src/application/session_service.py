@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from domain.session import Session
 from application.user_service import UserService
@@ -35,3 +35,6 @@ class SessionService:
 
     def get_active_session(self) -> Optional[Session]:
         return self._active_session
+
+    def get_user_sessions(self, user_id: int) -> List[Session]:
+        return self.session_repository.get_by_user_id(user_id)

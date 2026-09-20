@@ -31,6 +31,9 @@ class MockSessionRepository:
             self.current_id += 1
             self.sessions.append(session)
         return session
+    def get_by_user_id(self, user_id: int):
+        return sorted([s for s in self.sessions if s.user_id == user_id], 
+                     key=lambda s: s.started_at, reverse=True)
 
 class TestSessionService(unittest.TestCase):
     def setUp(self):
@@ -62,6 +65,19 @@ class TestSessionService(unittest.TestCase):
         self.assertIsNotNone(ended_session.ended_at)
         self.assertIsNotNone(ended_session.duration_seconds)
         self.assertIsNone(self.session_service.get_active_session())
+
+    def test_get_user_sessions(self):
+        user = self.user_service.create_user("Test User")
+        self.user_service.set_active_user(user)
+        
+        self.session_service.start_session()
+        self.session_service.end_session()
+        
+        self.session_service.start_session()
+        self.session_service.end_session()
+        
+        sessions = self.session_service.get_user_sessions(user.id)
+        self.assertEqual(len(sessions), 2)
 
 if __name__ == '__main__':
     unittest.main()
