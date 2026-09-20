@@ -1,6 +1,9 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QScrollArea, QMessageBox
 from PySide6.QtCore import Qt, QTimer
 from datetime import datetime
+import time
+from domain.blink_detector import BlinkDetector
+from domain.ear_calculator import get_eye_state
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None):
@@ -9,6 +12,7 @@ class DashboardWidget(QWidget):
         self.session_service = session_service
         self.camera_service = camera_service
         self.face_analyzer = face_analyzer
+        self.blink_detector = BlinkDetector()
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
@@ -118,11 +122,33 @@ class DashboardWidget(QWidget):
         self.lbl_video.setVisible(False)
         status_layout.addWidget(self.lbl_video)
         
+        self.metrics_container = QWidget()
+        metrics_layout = QVBoxLayout(self.metrics_container)
+        metrics_layout.setContentsMargins(0, 5, 0, 0)
+        
         self.lbl_face_status = QLabel("Rostro no detectado")
         self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
         self.lbl_face_status.setAlignment(Qt.AlignCenter)
-        self.lbl_face_status.setVisible(False)
-        status_layout.addWidget(self.lbl_face_status)
+        metrics_layout.addWidget(self.lbl_face_status)
+        
+        self.lbl_ear = QLabel("EAR: ---")
+        self.lbl_ear.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_ear)
+        
+        self.lbl_eye_state = QLabel("Estado: UNKNOWN")
+        self.lbl_eye_state.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_eye_state)
+        
+        self.lbl_blinks = QLabel("Parpadeos: 0")
+        self.lbl_blinks.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_blinks)
+        
+        self.lbl_bpm = QLabel("BPM: 0.0")
+        self.lbl_bpm.setStyleSheet("color: #2c3e50; font-size: 13px; border: none;")
+        metrics_layout.addWidget(self.lbl_bpm)
+        
+        self.metrics_container.setVisible(False)
+        status_layout.addWidget(self.metrics_container)
         
         left_column.addWidget(status_panel)
         
@@ -369,12 +395,13 @@ class DashboardWidget(QWidget):
             return
         try:
             self.session_service.start_session()
+            self.blink_detector.reset()
             self.timer.start(1000)
             
             if self.camera_service:
                 if self.camera_service.start():
                     self.lbl_video.setVisible(True)
-                    self.lbl_face_status.setVisible(True)
+                    self.metrics_container.setVisible(True)
                     self.camera_timer.start(33) # ~30 fps
                 else:
                     QMessageBox.warning(self, "Cámara no disponible", "No se pudo iniciar la cámara. La sesión continuará sin video.")
@@ -395,10 +422,7 @@ class DashboardWidget(QWidget):
                 self.camera_timer.stop()
                 self.lbl_video.setVisible(False)
                 self.lbl_video.setText("Cámara inactiva")
-                
-                self.lbl_face_status.setVisible(False)
-                self.lbl_face_status.setText("Rostro no detectado")
-                self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
+                self.metrics_container.setVisible(False)
                 
             self._update_session_ui_state()
             self._load_history()
@@ -443,13 +467,26 @@ class DashboardWidget(QWidget):
         if frame_rgb is not None:
             if self.face_analyzer:
                 result = self.face_analyzer.analyze_frame(frame_rgb)
+                current_time = time.time()
+                
                 if result:
                     self.lbl_face_status.setText("Rostro detectado")
                     self.lbl_face_status.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 13px; border: none;")
                     frame_rgb = self.face_analyzer.draw_landmarks(frame_rgb, result)
+                    eye_metrics = get_eye_state(result)
                 else:
                     self.lbl_face_status.setText("Rostro no detectado")
                     self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
+                    eye_metrics = get_eye_state(None)
+                    
+                self.lbl_ear.setText(f"EAR: {eye_metrics.ear_avg:.3f}" if eye_metrics.ear_avg is not None else "EAR: ---")
+                self.lbl_eye_state.setText(f"Estado: {eye_metrics.state.value}")
+                
+                self.blink_detector.process_state(eye_metrics.state, current_time)
+                blink_metrics = self.blink_detector.get_metrics(current_time)
+                
+                self.lbl_blinks.setText(f"Parpadeos: {blink_metrics.total_blinks}")
+                self.lbl_bpm.setText(f"BPM: {blink_metrics.blinks_per_minute:.1f}")
                     
             from PySide6.QtGui import QImage, QPixmap
             h, w, ch = frame_rgb.shape
