@@ -3,11 +3,12 @@ from PySide6.QtCore import Qt, QTimer
 from datetime import datetime
 
 class DashboardWidget(QWidget):
-    def __init__(self, user_service=None, session_service=None, camera_service=None):
+    def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
         self.camera_service = camera_service
+        self.face_analyzer = face_analyzer
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
@@ -116,6 +117,12 @@ class DashboardWidget(QWidget):
         self.lbl_video.setMinimumSize(320, 240)
         self.lbl_video.setVisible(False)
         status_layout.addWidget(self.lbl_video)
+        
+        self.lbl_face_status = QLabel("Rostro no detectado")
+        self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
+        self.lbl_face_status.setAlignment(Qt.AlignCenter)
+        self.lbl_face_status.setVisible(False)
+        status_layout.addWidget(self.lbl_face_status)
         
         left_column.addWidget(status_panel)
         
@@ -367,6 +374,7 @@ class DashboardWidget(QWidget):
             if self.camera_service:
                 if self.camera_service.start():
                     self.lbl_video.setVisible(True)
+                    self.lbl_face_status.setVisible(True)
                     self.camera_timer.start(33) # ~30 fps
                 else:
                     QMessageBox.warning(self, "Cámara no disponible", "No se pudo iniciar la cámara. La sesión continuará sin video.")
@@ -387,6 +395,10 @@ class DashboardWidget(QWidget):
                 self.camera_timer.stop()
                 self.lbl_video.setVisible(False)
                 self.lbl_video.setText("Cámara inactiva")
+                
+                self.lbl_face_status.setVisible(False)
+                self.lbl_face_status.setText("Rostro no detectado")
+                self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
                 
             self._update_session_ui_state()
             self._load_history()
@@ -427,11 +439,21 @@ class DashboardWidget(QWidget):
         if not self.camera_service or not self.camera_service.is_running():
             return
             
-        frame = self.camera_service.get_frame()
-        if frame is not None:
+        frame_rgb = self.camera_service.get_frame()
+        if frame_rgb is not None:
+            if self.face_analyzer:
+                result = self.face_analyzer.analyze_frame(frame_rgb)
+                if result:
+                    self.lbl_face_status.setText("Rostro detectado")
+                    self.lbl_face_status.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 13px; border: none;")
+                    frame_rgb = self.face_analyzer.draw_landmarks(frame_rgb, result)
+                else:
+                    self.lbl_face_status.setText("Rostro no detectado")
+                    self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
+                    
             from PySide6.QtGui import QImage, QPixmap
-            h, w, ch = frame.shape
+            h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
-            qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             self.lbl_video.setPixmap(pixmap.scaled(self.lbl_video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
