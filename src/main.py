@@ -9,6 +9,8 @@ from presentation.main_window import MainWindow
 from infrastructure.database import DatabaseManager
 from infrastructure.user_repository import SQLiteUserRepository
 from application.user_service import UserService
+from infrastructure.session_repository import SQLiteSessionRepository
+from application.session_service import SessionService
 
 def main():
     # Inicializar la base de datos al arrancar
@@ -18,13 +20,16 @@ def main():
     # Preparar dependencias
     user_repo = SQLiteUserRepository(db_manager)
     user_service = UserService(user_repo)
+    
+    session_repo = SQLiteSessionRepository(db_manager)
+    session_service = SessionService(session_repo, user_service)
 
     app = QApplication(sys.path)
     
     # Configuración global de la aplicación
     app.setApplicationName("ErgoSense")
     
-    window = MainWindow(user_service)
+    window = MainWindow(user_service, session_service)
     window.show()
     
     sys.exit(app.exec())

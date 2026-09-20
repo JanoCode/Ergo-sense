@@ -34,4 +34,16 @@ class DatabaseManager:
                 )
             ''')
             
+            # Crear tabla de sesiones
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ended_at TIMESTAMP,
+                    duration_seconds INTEGER,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+            
             conn.commit()

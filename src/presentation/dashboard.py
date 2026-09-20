@@ -1,10 +1,16 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QScrollArea
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QScrollArea, QMessageBox
+from PySide6.QtCore import Qt, QTimer
+from datetime import datetime
 
 class DashboardWidget(QWidget):
-    def __init__(self, user_service=None):
+    def __init__(self, user_service=None, session_service=None):
         super().__init__()
         self.user_service = user_service
+        self.session_service = session_service
+        
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._update_session_time)
+        
         self._setup_ui()
         self._load_users()
         self._update_active_user_display()
@@ -51,11 +57,18 @@ class DashboardWidget(QWidget):
         self.lbl_status.setStyleSheet("font-size: 16px; color: #7f8c8d; border: none;")
         status_layout.addWidget(self.lbl_status)
         
+        self.lbl_elapsed = QLabel("Transcurrido: 00:00:00")
+        self.lbl_elapsed.setStyleSheet("font-size: 14px; color: #7f8c8d; border: none;")
+        self.lbl_elapsed.setVisible(False)
+        status_layout.addWidget(self.lbl_elapsed)
+        
         status_layout.addSpacing(10)
         
-        self.btn_start_monitoring = QPushButton("Iniciar monitoreo")
-        self.btn_start_monitoring.setMinimumHeight(40)
-        self.btn_start_monitoring.setStyleSheet("""
+        btn_action_layout = QHBoxLayout()
+        
+        self.btn_start_session = QPushButton("Iniciar sesión")
+        self.btn_start_session.setMinimumHeight(40)
+        self.btn_start_session.setStyleSheet("""
             QPushButton {
                 background-color: #3498db;
                 color: white;
@@ -66,8 +79,33 @@ class DashboardWidget(QWidget):
             QPushButton:hover {
                 background-color: #2980b9;
             }
+            QPushButton:disabled {
+                background-color: #bdc3c7;
+            }
         """)
-        status_layout.addWidget(self.btn_start_monitoring)
+        self.btn_start_session.clicked.connect(self._start_session)
+        
+        self.btn_end_session = QPushButton("Finalizar sesión")
+        self.btn_end_session.setMinimumHeight(40)
+        self.btn_end_session.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        self.btn_end_session.clicked.connect(self._end_session)
+        self.btn_end_session.setVisible(False)
+        
+        btn_action_layout.addWidget(self.btn_start_session)
+        btn_action_layout.addWidget(self.btn_end_session)
+        status_layout.addLayout(btn_action_layout)
+        
         left_column.addWidget(status_panel)
         
         # Panel de Usuarios
@@ -238,3 +276,55 @@ class DashboardWidget(QWidget):
         else:
             self.lbl_active_user.setText("No hay usuario activo")
             self.lbl_active_user.setStyleSheet("font-size: 16px; font-weight: bold; color: #e74c3c; border: none;")
+            
+        self._update_session_ui_state()
+
+    def _start_session(self):
+        if not self.session_service:
+            return
+        try:
+            self.session_service.start_session()
+            self.timer.start(1000)
+            self._update_session_ui_state()
+        except Exception as e:
+            QMessageBox.warning(self, "Error al iniciar", str(e))
+
+    def _end_session(self):
+        if not self.session_service:
+            return
+        try:
+            self.session_service.end_session()
+            self.timer.stop()
+            self._update_session_ui_state()
+        except Exception as e:
+            QMessageBox.warning(self, "Error al finalizar", str(e))
+            
+    def _update_session_ui_state(self):
+        active_session = self.session_service.get_active_session() if self.session_service else None
+        active_user = self.user_service.get_active_user() if self.user_service else None
+        
+        if active_session:
+            self.btn_start_session.setVisible(False)
+            self.btn_end_session.setVisible(True)
+            start_str = active_session.started_at.strftime('%H:%M:%S') if active_session.started_at else '...'
+            self.lbl_status.setText(f"Sesión iniciada a las {start_str}")
+            self.lbl_status.setStyleSheet("color: #27ae60; font-size: 16px; font-weight: bold; border: none;")
+            self.lbl_elapsed.setVisible(True)
+        else:
+            self.btn_start_session.setVisible(True)
+            self.btn_end_session.setVisible(False)
+            self.btn_start_session.setEnabled(active_user is not None)
+            self.lbl_status.setText("Inactivo")
+            self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 16px; border: none;")
+            self.lbl_elapsed.setText("Transcurrido: 00:00:00")
+            self.lbl_elapsed.setVisible(False)
+
+    def _update_session_time(self):
+        if not self.session_service: return
+        session = self.session_service.get_active_session()
+        if session and session.started_at:
+            elapsed = datetime.now() - session.started_at
+            total_seconds = int(elapsed.total_seconds())
+            hours, remainder = divmod(total_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            self.lbl_elapsed.setText(f"Transcurrido: {hours:02d}:{minutes:02d}:{seconds:02d}")
