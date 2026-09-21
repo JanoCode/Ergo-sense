@@ -1,5 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 class EyeState(Enum):
@@ -155,3 +156,67 @@ class SessionFinalMetrics:
     prolonged_closures: int
     yawns: int
     max_head_deviation_degrees: Optional[float] = None
+
+class AnalyticsPeriod(Enum):
+    LAST_7_DAYS = 7
+    LAST_30_DAYS = 30
+    LAST_90_DAYS = 90
+    ALL_TIME = 0
+
+class FatigueTrend(Enum):
+    IMPROVING = "IMPROVING"
+    STABLE = "STABLE"
+    WORSENING = "WORSENING"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+
+@dataclass
+class HistoricalFatigueSession:
+    started_at: datetime
+    summary: SessionFatigueSummary
+
+@dataclass
+class PeriodFatigueStats:
+    start: Optional[datetime]
+    end: Optional[datetime]
+    session_count: int
+    comparable_session_count: int
+    total_monitored_seconds: int
+    average_session_duration_seconds: Optional[float]
+    average_score: Optional[float]
+    average_max_score: Optional[float]
+    moderate_session_percentage: Optional[float]
+    high_session_percentage: Optional[float]
+    average_time_to_mild_seconds: Optional[float]
+    average_time_to_moderate_seconds: Optional[float]
+    average_time_to_high_seconds: Optional[float]
+    average_perclos: Optional[float]
+    average_prolonged_closures: Optional[float]
+    average_yawns: Optional[float]
+
+@dataclass
+class AnalyticsChange:
+    previous: Optional[float]
+    current: Optional[float]
+    absolute: Optional[float]
+    percentage: Optional[float]
+
+@dataclass
+class DailyFatigueStats:
+    day: date
+    session_count: int
+    comparable_session_count: int
+    total_monitored_seconds: int
+    average_score: Optional[float]
+    average_time_to_moderate_seconds: Optional[float]
+
+@dataclass
+class UserFatigueAnalytics:
+    user_id: int
+    period: AnalyticsPeriod
+    current_period: PeriodFatigueStats
+    previous_period: Optional[PeriodFatigueStats]
+    changes: Dict[str, AnalyticsChange]
+    trend: FatigueTrend
+    available_data: Dict[str, int]
+    insights: List[str]
+    daily: List[DailyFatigueStats]

@@ -17,6 +17,9 @@ from fatigue.repository import SQLiteBaselineRepository
 from fatigue.service import BaselineService
 from fatigue.history_repository import SQLiteFatigueHistoryRepository
 from fatigue.history_service import FatigueHistoryService
+from fatigue.analytics import (
+    FatigueAnalyticsService, SQLiteFatigueAnalyticsRepository,
+)
 
 def main():
     # Inicializar la base de datos al arrancar
@@ -37,6 +40,9 @@ def main():
     fatigue_history_service = FatigueHistoryService(
         SQLiteFatigueHistoryRepository(db_manager)
     )
+    fatigue_analytics_service = FatigueAnalyticsService(
+        SQLiteFatigueAnalyticsRepository(db_manager)
+    )
 
     app = QApplication(sys.path)
     
@@ -45,7 +51,7 @@ def main():
     
     window = MainWindow(
         user_service, session_service, camera_service, face_analyzer,
-        baseline_service, fatigue_history_service,
+        baseline_service, fatigue_history_service, fatigue_analytics_service,
     )
     window.show()
     

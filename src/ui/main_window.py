@@ -4,7 +4,7 @@ from ui.dashboard import DashboardWidget
 class MainWindow(QMainWindow):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
                  face_analyzer=None, baseline_service=None,
-                 fatigue_history_service=None):
+                 fatigue_history_service=None, fatigue_analytics_service=None):
         super().__init__()
         
         self.camera_service = camera_service
@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
         # Cargar vista inicial (Dashboard)
         self.dashboard = DashboardWidget(
             user_service, session_service, camera_service, face_analyzer,
-            baseline_service, fatigue_history_service,
+            baseline_service, fatigue_history_service, fatigue_analytics_service,
         )
         self.main_layout.addWidget(self.dashboard)
 

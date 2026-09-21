@@ -12,11 +12,12 @@ from fatigue.head_pose import HeadPoseEstimator
 from fatigue.baseline import BaselineState
 from fatigue.fatigue_engine import FatigueEngine
 from fatigue.models import FatigueMetrics, SessionFinalMetrics
+from fatigue.models import AnalyticsPeriod
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
                  face_analyzer=None, baseline_service=None,
-                 fatigue_history_service=None):
+                 fatigue_history_service=None, fatigue_analytics_service=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
@@ -24,6 +25,7 @@ class DashboardWidget(QWidget):
         self.face_analyzer = face_analyzer
         self.baseline_service = baseline_service
         self.fatigue_history_service = fatigue_history_service
+        self.fatigue_analytics_service = fatigue_analytics_service
         self.blink_detector = BlinkDetector()
         self.perclos_calc = PerclosCalculator()
         self.prolonged_detector = ProlongedClosureDetector()
@@ -288,6 +290,26 @@ class DashboardWidget(QWidget):
         users_title_layout.addWidget(self.btn_create_user)
         
         users_layout.addLayout(users_title_layout)
+
+        analytics_title = QLabel("Historial de fatiga — últimos 7 días")
+        analytics_title.setStyleSheet(
+            "font-size: 14px; font-weight: bold; border: none; margin-top: 6px;"
+        )
+        users_layout.addWidget(analytics_title)
+
+        self.lbl_analytics_moderate = QLabel("Tiempo medio hasta MODERATE: ---")
+        self.lbl_analytics_score = QLabel("Score promedio: ---")
+        self.lbl_analytics_comparison = QLabel("Comparación: ---")
+        self.lbl_analytics_trend = QLabel("Tendencia: ---")
+        self.lbl_analytics_sessions = QLabel("Sesiones analizadas: 0")
+        for label in (
+            self.lbl_analytics_moderate, self.lbl_analytics_score,
+            self.lbl_analytics_comparison, self.lbl_analytics_trend,
+            self.lbl_analytics_sessions,
+        ):
+            label.setStyleSheet("font-size: 12px; color: #5d6d7e; border: none;")
+            label.setWordWrap(True)
+            users_layout.addWidget(label)
         
         # Scroll area para los usuarios
         self.users_scroll = QScrollArea()
@@ -437,6 +459,7 @@ class DashboardWidget(QWidget):
             
         self._update_session_ui_state()
         self._load_history()
+        self._update_longitudinal_analytics()
 
     def _load_history(self):
         while self.history_list_layout.count() > 1:
@@ -607,6 +630,7 @@ class DashboardWidget(QWidget):
                 
             self._update_session_ui_state()
             self._load_history()
+            self._update_longitudinal_analytics()
         except Exception as e:
             QMessageBox.warning(self, "Error al finalizar", str(e))
             
@@ -859,6 +883,47 @@ class DashboardWidget(QWidget):
         self.lbl_fatigue_level.setText("Nivel: ---")
         self.lbl_fatigue_confidence.setText("Confianza: ---")
         self.lbl_fatigue_signals.setText("Señales: evaluando ventana inicial...")
+
+    def _update_longitudinal_analytics(self):
+        active_user = self.user_service.get_active_user() if self.user_service else None
+        if not active_user or not self.fatigue_analytics_service:
+            self.lbl_analytics_moderate.setText("Tiempo medio hasta MODERATE: ---")
+            self.lbl_analytics_score.setText("Score promedio: ---")
+            self.lbl_analytics_comparison.setText("Comparación: ---")
+            self.lbl_analytics_trend.setText("Tendencia: ---")
+            self.lbl_analytics_sessions.setText("Sesiones analizadas: 0")
+            return
+
+        analytics = self.fatigue_analytics_service.analyze(
+            active_user.id, AnalyticsPeriod.LAST_7_DAYS
+        )
+        current = analytics.current_period
+        moderate = current.average_time_to_moderate_seconds
+        if moderate is None:
+            moderate_text = "---"
+        else:
+            hours, remainder = divmod(int(moderate), 3600)
+            minutes = remainder // 60
+            moderate_text = f"{hours}h {minutes:02d}m"
+        score_text = (
+            f"{current.average_score:.1f}"
+            if current.average_score is not None else "---"
+        )
+        score_change = analytics.changes.get("average_score")
+        if score_change and score_change.absolute is not None:
+            comparison = f"{score_change.absolute:+.1f} puntos vs período anterior"
+        else:
+            comparison = "Sin comparación suficiente"
+
+        self.lbl_analytics_moderate.setText(
+            f"Tiempo medio hasta MODERATE: {moderate_text}"
+        )
+        self.lbl_analytics_score.setText(f"Score promedio: {score_text}")
+        self.lbl_analytics_comparison.setText(f"Comparación: {comparison}")
+        self.lbl_analytics_trend.setText(f"Tendencia: {analytics.trend.value}")
+        self.lbl_analytics_sessions.setText(
+            f"Sesiones analizadas: {current.comparable_session_count}"
+        )
 
     def _update_baseline_label(self):
         if not self.baseline_service:
