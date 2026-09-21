@@ -130,6 +130,10 @@ class FatigueAnalyticsService:
             insights=insights, daily=self.group_by_day(current_records),
         )
 
+    def get_session_history(self, user_id: int) -> List[HistoricalFatigueSession]:
+        """Devuelve sesiones resumidas, ordenadas cronológicamente."""
+        return self.repository.get_user_history(user_id)
+
     def calculate_stats(
         self,
         records: Iterable[HistoricalFatigueSession],

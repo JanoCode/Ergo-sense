@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import cv2
-from typing import Optional, Tuple
+from typing import Optional
 from monitoring.models import FaceLandmarksResult, Point3D
 from fatigue.models import HeadPoseAngles, HeadPoseResult
 

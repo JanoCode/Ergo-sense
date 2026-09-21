@@ -27,6 +27,7 @@ class MainWindow(QMainWindow):
         self.main_layout.addWidget(self.dashboard)
 
     def closeEvent(self, event):
+        self.dashboard.shutdown()
         if self.camera_service:
             self.camera_service.stop()
         super().closeEvent(event)

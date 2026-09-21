@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Optional, Tuple
+from typing import Optional
 from fatigue.models import EyeState, PerclosResult, ProlongedClosureResult
 
 class ProlongedClosureConfig:
