@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 class EyeState(Enum):
     OPEN = "OPEN"
@@ -75,6 +75,7 @@ class FatigueMetrics:
     average_blink_duration: Optional[float] = None
     blink_rate: Optional[float] = None
     yawns_per_hour: Optional[float] = None
+    yawns: Optional[int] = None
     average_yawn_duration: Optional[float] = None
     current_pitch_degrees: Optional[float] = None
     pitch_deviation_degrees: Optional[float] = None
@@ -92,3 +93,65 @@ class FatigueAssessment:
     active_signals: List[str]
     unavailable_signals: List[str]
     reasons: List[str]
+
+class FatigueEventType(Enum):
+    PROLONGED_EYE_CLOSURE = "PROLONGED_EYE_CLOSURE"
+    YAWN = "YAWN"
+    HEAD_DROP = "HEAD_DROP"
+    ENTERED_MODERATE = "ENTERED_MODERATE"
+    ENTERED_HIGH = "ENTERED_HIGH"
+    ENTERED_VERY_HIGH = "ENTERED_VERY_HIGH"
+
+@dataclass
+class StoredFatigueAssessment:
+    session_id: int
+    user_id: int
+    timestamp: float
+    score: float
+    level: FatigueLevel
+    confidence: float
+    active_signals: List[str]
+    unavailable_signals: List[str]
+    reasons: List[str]
+    perclos: Optional[float] = None
+    head_deviation_degrees: Optional[float] = None
+    id: Optional[int] = None
+
+@dataclass
+class FatigueEvent:
+    session_id: int
+    user_id: int
+    event_type: FatigueEventType
+    timestamp: float
+    data: Dict[str, Any]
+    id: Optional[int] = None
+
+@dataclass
+class SessionFatigueSummary:
+    session_id: int
+    user_id: int
+    duration_seconds: int
+    total_blinks: int
+    average_blink_rate: Optional[float]
+    average_blink_duration: Optional[float]
+    average_perclos: Optional[float]
+    max_perclos: Optional[float]
+    prolonged_closures: int
+    yawns: int
+    max_head_deviation_degrees: Optional[float]
+    average_score: Optional[float]
+    max_score: Optional[float]
+    max_level: Optional[FatigueLevel]
+    time_to_mild_seconds: Optional[float]
+    time_to_moderate_seconds: Optional[float]
+    time_to_high_seconds: Optional[float]
+
+@dataclass
+class SessionFinalMetrics:
+    duration_seconds: int
+    total_blinks: int
+    average_blink_rate: Optional[float]
+    average_blink_duration: Optional[float]
+    prolonged_closures: int
+    yawns: int
+    max_head_deviation_degrees: Optional[float] = None

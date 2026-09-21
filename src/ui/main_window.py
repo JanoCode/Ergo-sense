@@ -2,7 +2,9 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout
 from ui.dashboard import DashboardWidget
 
 class MainWindow(QMainWindow):
-    def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None, baseline_service=None):
+    def __init__(self, user_service=None, session_service=None, camera_service=None,
+                 face_analyzer=None, baseline_service=None,
+                 fatigue_history_service=None):
         super().__init__()
         
         self.camera_service = camera_service
@@ -18,7 +20,10 @@ class MainWindow(QMainWindow):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         
         # Cargar vista inicial (Dashboard)
-        self.dashboard = DashboardWidget(user_service, session_service, camera_service, face_analyzer, baseline_service)
+        self.dashboard = DashboardWidget(
+            user_service, session_service, camera_service, face_analyzer,
+            baseline_service, fatigue_history_service,
+        )
         self.main_layout.addWidget(self.dashboard)
 
     def closeEvent(self, event):

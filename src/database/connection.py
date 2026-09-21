@@ -67,4 +67,73 @@ class DatabaseManager:
                 )
             ''')
 
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS fatigue_assessments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    timestamp REAL NOT NULL,
+                    score REAL NOT NULL,
+                    level TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    active_signals TEXT NOT NULL DEFAULT '[]',
+                    unavailable_signals TEXT NOT NULL DEFAULT '[]',
+                    reasons TEXT NOT NULL DEFAULT '[]',
+                    perclos REAL,
+                    head_deviation_degrees REAL,
+                    UNIQUE(session_id, timestamp),
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS fatigue_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    timestamp REAL NOT NULL,
+                    data_json TEXT NOT NULL DEFAULT '{}',
+                    UNIQUE(session_id, event_type, timestamp),
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS fatigue_session_summaries (
+                    session_id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    duration_seconds INTEGER NOT NULL,
+                    total_blinks INTEGER NOT NULL,
+                    average_blink_rate REAL,
+                    average_blink_duration REAL,
+                    average_perclos REAL,
+                    max_perclos REAL,
+                    prolonged_closures INTEGER NOT NULL,
+                    yawns INTEGER NOT NULL,
+                    max_head_deviation_degrees REAL,
+                    average_score REAL,
+                    max_score REAL,
+                    max_level TEXT,
+                    time_to_mild_seconds REAL,
+                    time_to_moderate_seconds REAL,
+                    time_to_high_seconds REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_fatigue_assessments_session "
+                "ON fatigue_assessments(session_id, timestamp)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_fatigue_events_session "
+                "ON fatigue_events(session_id, timestamp)"
+            )
+
             conn.commit()

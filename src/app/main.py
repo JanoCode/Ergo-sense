@@ -15,6 +15,8 @@ from monitoring.camera import CameraService
 from monitoring.face_landmarks import FaceAnalyzer
 from fatigue.repository import SQLiteBaselineRepository
 from fatigue.service import BaselineService
+from fatigue.history_repository import SQLiteFatigueHistoryRepository
+from fatigue.history_service import FatigueHistoryService
 
 def main():
     # Inicializar la base de datos al arrancar
@@ -32,13 +34,19 @@ def main():
     face_analyzer = FaceAnalyzer()
     baseline_repo = SQLiteBaselineRepository(db_manager)
     baseline_service = BaselineService(baseline_repo)
+    fatigue_history_service = FatigueHistoryService(
+        SQLiteFatigueHistoryRepository(db_manager)
+    )
 
     app = QApplication(sys.path)
     
     # Configuración global de la aplicación
     app.setApplicationName("ErgoSense")
     
-    window = MainWindow(user_service, session_service, camera_service, face_analyzer, baseline_service)
+    window = MainWindow(
+        user_service, session_service, camera_service, face_analyzer,
+        baseline_service, fatigue_history_service,
+    )
     window.show()
     
     sys.exit(app.exec())

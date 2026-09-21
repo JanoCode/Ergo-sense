@@ -11,16 +11,19 @@ from fatigue.yawn_detector import YawnDetector
 from fatigue.head_pose import HeadPoseEstimator
 from fatigue.baseline import BaselineState
 from fatigue.fatigue_engine import FatigueEngine
-from fatigue.models import FatigueMetrics
+from fatigue.models import FatigueMetrics, SessionFinalMetrics
 
 class DashboardWidget(QWidget):
-    def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None, baseline_service=None):
+    def __init__(self, user_service=None, session_service=None, camera_service=None,
+                 face_analyzer=None, baseline_service=None,
+                 fatigue_history_service=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
         self.camera_service = camera_service
         self.face_analyzer = face_analyzer
         self.baseline_service = baseline_service
+        self.fatigue_history_service = fatigue_history_service
         self.blink_detector = BlinkDetector()
         self.perclos_calc = PerclosCalculator()
         self.prolonged_detector = ProlongedClosureDetector()
@@ -36,6 +39,7 @@ class DashboardWidget(QWidget):
         self._assessment_sustained_down = False
         self._assessment_sustained_deviation = False
         self._assessment_max_pitch_deviation = 0.0
+        self._session_max_head_deviation = 0.0
         self._frame_width = 640
         self._frame_height = 480
         
@@ -514,6 +518,7 @@ class DashboardWidget(QWidget):
             self._assessment_sustained_down = False
             self._assessment_sustained_deviation = False
             self._assessment_max_pitch_deviation = 0.0
+            self._session_max_head_deviation = 0.0
             self.fatigue_engine.reset(current_session_start)
             self._reset_fatigue_ui()
 
@@ -541,7 +546,9 @@ class DashboardWidget(QWidget):
         if not self.session_service:
             return
         try:
-            self.session_service.end_session()
+            current_time = time.time()
+            blink_metrics = self.blink_detector.get_metrics(current_time)
+            ended_session = self.session_service.end_session()
             self.timer.stop()
             
             if self.camera_service:
@@ -553,6 +560,50 @@ class DashboardWidget(QWidget):
 
             if self.baseline_service:
                 self.baseline_service.finish()
+
+            if self.fatigue_history_service and ended_session.id is not None:
+                self.fatigue_history_service.record_metric_events(
+                    ended_session.id,
+                    ended_session.user_id,
+                    current_time,
+                    FatigueMetrics(
+                        prolonged_closures=max(
+                            self.prolonged_detector.count
+                            - self._last_assessment_closures, 0
+                        ),
+                        yawns=max(
+                            self.yawn_detector.total_yawns
+                            - self._last_assessment_yawns, 0
+                        ),
+                        sustained_head_drop=self._assessment_sustained_down,
+                        pitch_deviation_degrees=(
+                            self._assessment_max_pitch_deviation or None
+                        ),
+                    ),
+                )
+                summary = self.fatigue_history_service.finalize_session(
+                    session_id=ended_session.id,
+                    user_id=ended_session.user_id,
+                    session_started_timestamp=ended_session.started_at.timestamp(),
+                    final_metrics=SessionFinalMetrics(
+                        duration_seconds=ended_session.duration_seconds or 0,
+                        total_blinks=blink_metrics.total_blinks,
+                        average_blink_rate=(
+                            blink_metrics.blinks_per_minute
+                            if ended_session.duration_seconds else None
+                        ),
+                        average_blink_duration=(
+                            blink_metrics.avg_blink_duration
+                            if blink_metrics.total_blinks > 0 else None
+                        ),
+                        prolonged_closures=self.prolonged_detector.count,
+                        yawns=self.yawn_detector.total_yawns,
+                        max_head_deviation_degrees=(
+                            self._session_max_head_deviation or None
+                        ),
+                    ),
+                )
+                self._show_session_fatigue_summary(summary)
                 
             self._update_session_ui_state()
             self._load_history()
@@ -714,9 +765,12 @@ class DashboardWidget(QWidget):
         self._assessment_sustained_down |= head_result.sustained_down_tilt
         self._assessment_sustained_deviation |= head_result.sustained_deviation
         if head_result.deviation_from_reference:
+            pitch_deviation = abs(head_result.deviation_from_reference.pitch)
             self._assessment_max_pitch_deviation = max(
-                self._assessment_max_pitch_deviation,
-                abs(head_result.deviation_from_reference.pitch),
+                self._assessment_max_pitch_deviation, pitch_deviation,
+            )
+            self._session_max_head_deviation = max(
+                self._session_max_head_deviation, pitch_deviation,
             )
         if not self.fatigue_engine.is_due(current_time):
             return
@@ -733,6 +787,7 @@ class DashboardWidget(QWidget):
             ),
             blink_rate=blink_metrics.blinks_per_minute,
             yawns_per_hour=yawn_metrics.yawns_per_hour,
+            yawns=max(yawn_metrics.total_yawns - self._last_assessment_yawns, 0),
             average_yawn_duration=(
                 yawn_metrics.avg_duration if yawn_metrics.total_yawns > 0 else None
             ),
@@ -755,6 +810,15 @@ class DashboardWidget(QWidget):
         if assessment is None:
             return
 
+        active_session = (
+            self.session_service.get_active_session() if self.session_service else None
+        )
+        if (self.fatigue_history_service and active_session
+                and active_session.id is not None):
+            self.fatigue_history_service.record_assessment(
+                active_session.id, active_session.user_id, assessment, metrics
+            )
+
         self._last_assessment_closures = closure_result.count
         self._last_assessment_yawns = yawn_metrics.total_yawns
         self._assessment_sustained_down = False
@@ -767,6 +831,28 @@ class DashboardWidget(QWidget):
         )
         signals = ", ".join(assessment.active_signals[:3]) or "ninguna"
         self.lbl_fatigue_signals.setText(f"Señales: {signals}")
+
+    def _show_session_fatigue_summary(self, summary):
+        hours, remainder = divmod(summary.duration_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        average_score = (
+            f"{summary.average_score:.1f}" if summary.average_score is not None else "---"
+        )
+        max_score = f"{summary.max_score:.1f}" if summary.max_score is not None else "---"
+        max_level = summary.max_level.value if summary.max_level else "---"
+        moderate = (
+            f"{summary.time_to_moderate_seconds:.0f}s"
+            if summary.time_to_moderate_seconds is not None else "No alcanzado"
+        )
+        QMessageBox.information(
+            self,
+            "Resumen de fatiga",
+            f"Duración: {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+            f"Fatigue Score promedio: {average_score}\n"
+            f"Fatigue Score máximo: {max_score}\n"
+            f"Nivel máximo: {max_level}\n"
+            f"Tiempo hasta MODERATE: {moderate}",
+        )
 
     def _reset_fatigue_ui(self):
         self.lbl_fatigue_score.setText("Fatigue Score: ---")
