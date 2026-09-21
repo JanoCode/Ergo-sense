@@ -47,6 +47,10 @@ class DashboardWidget(QWidget):
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
+        self.camera_timeout_timer = QTimer(self)
+        self.camera_timeout_timer.setSingleShot(True)
+        self.camera_timeout_timer.timeout.connect(self._on_camera_timeout)
+        self._first_camera_frame_received = False
         
         self._setup_ui()
         self._load_users()
@@ -786,6 +790,12 @@ class DashboardWidget(QWidget):
     def _start_monitoring_worker(self):
         if self.monitoring_worker and self.monitoring_worker.isRunning():
             return
+        self._first_camera_frame_received = False
+        self.camera_timeout_timer.start(8000)
+        if hasattr(self, "lbl_camera_status"):
+            self.lbl_camera_status.setText("Iniciando cámara...")
+        if hasattr(self, "btn_retry_camera"):
+            self.btn_retry_camera.setVisible(False)
         self.monitoring_worker = MonitoringWorker(
             camera_service=self.camera_service,
             face_analyzer_factory=self.face_analyzer_factory,
@@ -798,12 +808,14 @@ class DashboardWidget(QWidget):
         )
         self.monitoring_worker.sample_ready.connect(self._on_monitoring_sample)
         self.monitoring_worker.camera_ready.connect(self._on_camera_ready)
+        self.monitoring_worker.analysis_status.connect(self._on_analysis_status)
         self.monitoring_worker.error.connect(self._on_monitoring_error)
         self.monitoring_worker.finished.connect(self._on_monitoring_stopped)
         self.monitoring_worker.finished.connect(self.monitoring_worker.deleteLater)
         self.monitoring_worker.start()
 
     def _stop_monitoring_worker(self):
+        self.camera_timeout_timer.stop()
         worker = self.monitoring_worker
         if worker is None:
             self.camera_service.stop()
@@ -820,16 +832,56 @@ class DashboardWidget(QWidget):
         self.monitoring_worker = None
 
     def _on_camera_ready(self, index, width, height, fps):
-        self.lbl_video.setText("")
+        if hasattr(self, "lbl_camera_status"):
+            self.lbl_camera_status.setText("Cámara activa · esperando video")
         self.lbl_status.setToolTip(
             f"Cámara {index}: {width}x{height}, {fps:.1f} FPS"
         )
 
-    def _on_monitoring_error(self, message):
+    def _on_analysis_status(self, status, message):
+        self.lbl_face_status.setText(message)
+        if status == "error":
+            self.lbl_face_status.setStyleSheet(
+                "color: #c0392b; font-weight: bold; border: none;"
+            )
+        elif status == "ready":
+            self.lbl_face_status.setStyleSheet(
+                "color: #5e6b7d; font-weight: 600; border: none;"
+            )
+
+    def _on_camera_timeout(self):
+        if self._first_camera_frame_received:
+            return
         self.lbl_video.clear()
-        self.lbl_video.setText("Cámara no disponible")
+        self.lbl_video.setText("No se pudo acceder a la cámara")
+        if hasattr(self, "lbl_camera_status"):
+            self.lbl_camera_status.setText("Cámara no disponible")
+        self.lbl_face_status.setText("Análisis facial no iniciado")
+        if hasattr(self, "btn_retry_camera"):
+            self.btn_retry_camera.setVisible(True)
+        self._stop_monitoring_worker()
+
+    def _retry_monitoring(self):
+        active_session = (
+            self.session_service.get_active_session() if self.session_service else None
+        )
+        if not active_session:
+            return
+        self.lbl_video.clear()
+        self.lbl_video.setText("Iniciando cámara...")
+        self._stop_monitoring_worker()
+        self._start_monitoring_worker()
+
+    def _on_monitoring_error(self, message):
+        self.camera_timeout_timer.stop()
+        self.lbl_video.clear()
+        self.lbl_video.setText("No se pudo acceder a la cámara")
         self.lbl_video.setToolTip(message)
-        self.lbl_face_status.setText("Monitoreo facial no disponible")
+        if hasattr(self, "lbl_camera_status"):
+            self.lbl_camera_status.setText("Cámara no disponible")
+        self.lbl_face_status.setText("Análisis facial no iniciado")
+        if hasattr(self, "btn_retry_camera"):
+            self.btn_retry_camera.setVisible(True)
 
     def _on_monitoring_stopped(self):
         worker = self.sender()
@@ -839,6 +891,13 @@ class DashboardWidget(QWidget):
     def _on_monitoring_sample(self, sample):
         frame_rgb = sample.frame_rgb
         if frame_rgb is not None:
+            if not self._first_camera_frame_received:
+                self._first_camera_frame_received = True
+                self.camera_timeout_timer.stop()
+                if hasattr(self, "lbl_camera_status"):
+                    self.lbl_camera_status.setText("Cámara activa")
+                if hasattr(self, "btn_retry_camera"):
+                    self.btn_retry_camera.setVisible(False)
             if sample.analyzed:
                 current_time = sample.current_time
                 
@@ -881,7 +940,12 @@ class DashboardWidget(QWidget):
                 
                 # Postura de cabeza
                 head_result = sample.head_result
-                if head_result.angles:
+                if not sample.face_detected:
+                    self.lbl_pitch.setText("Pitch: ---")
+                    self.lbl_yaw.setText("Yaw: ---")
+                    self.lbl_roll.setText("Roll: ---")
+                    self.lbl_head_dev.setText("Postura: Esperando detección facial")
+                elif head_result.angles:
                     a = head_result.angles
                     self.lbl_pitch.setText(f"Pitch: {a.pitch:.1f}°")
                     self.lbl_yaw.setText(f"Yaw: {a.yaw:.1f}°")
@@ -890,14 +954,18 @@ class DashboardWidget(QWidget):
                         import math
                         d = head_result.deviation_from_reference
                         dev_mag = math.sqrt(d.pitch**2 + d.yaw**2 + d.roll**2)
-                        self.lbl_head_dev.setText(f"Desviación: {dev_mag:.1f}°")
+                        self.lbl_head_dev.setText(
+                            f"Postura: Calibrado · desviación {dev_mag:.1f}°"
+                        )
                     elif not head_result.has_reference:
-                        self.lbl_head_dev.setText("Desviación: calibrando...")
+                        self.lbl_head_dev.setText("Postura: Calibrando")
+                    else:
+                        self.lbl_head_dev.setText("Postura: Calibrado")
                 else:
                     self.lbl_pitch.setText("Pitch: ---")
                     self.lbl_yaw.setText("Yaw: ---")
                     self.lbl_roll.setText("Roll: ---")
-                    self.lbl_head_dev.setText("Desviación: ---")
+                    self.lbl_head_dev.setText("Postura: Calibrando")
 
                 # Alimentar baseline con muestras válidas del frame actual
                 if self.baseline_service:

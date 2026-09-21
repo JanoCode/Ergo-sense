@@ -50,6 +50,18 @@ class TestModernDashboard(unittest.TestCase):
         self.assertEqual(self.dashboard.home_score_bar.value(), 32)
         self.assertEqual(self.dashboard.lbl_home_level.text(), "Nivel: Leve")
 
+    def test_monitoring_controls_have_clear_labels(self):
+        self.assertEqual(
+            self.dashboard.advanced_toggle.text(), "Ver métricas avanzadas"
+        )
+        self.assertEqual(
+            self.dashboard.lbl_head_dev.text(), "Esperando detección facial"
+        )
+        self.dashboard.advanced_toggle.setChecked(True)
+        self.assertEqual(
+            self.dashboard.advanced_toggle.text(), "Ocultar métricas avanzadas"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,10 +37,11 @@ class MonitoringSample:
 
 
 class MonitoringWorker(QThread):
-    """Captures frames and computes facial metrics outside the UI thread."""
+    """Captures video immediately and initializes facial analysis independently."""
 
     sample_ready = Signal(object)
     camera_ready = Signal(int, int, int, float)
+    analysis_status = Signal(str, str)
     error = Signal(str)
 
     def __init__(
@@ -67,33 +68,34 @@ class MonitoringWorker(QThread):
         self.analysis_interval = 1.0 / max(analysis_fps, 1.0)
         self.display_interval = 1.0 / max(display_fps, 1.0)
         self._stop_event = threading.Event()
+        self._analyzer_lock = threading.Lock()
+        self._initializer_thread = None
         self._last_analysis = 0.0
         self._last_metric_time = 0.0
         self._face_analyzer = None
+        self._first_frame_logged = False
 
     def request_stop(self):
         self._stop_event.set()
 
     def run(self):
-        logger.info("Iniciando worker de monitoreo")
+        logger.info("Monitoring worker started")
         try:
             if not self.camera_service.start():
-                self.error.emit(
-                    "No se encontró una webcam disponible en los índices 0, 1 o 2. "
-                    "La sesión continuará sin video."
+                message = (
+                    "No se pudo acceder a una webcam en los índices 0, 1 o 2."
                 )
+                logger.error(message)
+                self.error.emit(message)
                 return
 
             index, width, height, fps = self.camera_service.properties()
+            logger.info(
+                "Camera opened successfully: index=%s resolution=%sx%s fps=%.1f",
+                index, width, height, fps,
+            )
             self.camera_ready.emit(index if index is not None else -1, width, height, fps)
-
-            try:
-                factory = self.face_analyzer_factory
-                self._face_analyzer = factory() if callable(factory) else factory
-                logger.info("MediaPipe FaceLandmarker inicializado correctamente")
-            except Exception as exc:
-                logger.exception("No se pudo iniciar FaceLandmarker")
-                self.error.emit(f"La cámara inició, pero FaceLandmarker falló: {exc}")
+            self._start_analyzer_initialization()
 
             while not self._stop_event.is_set():
                 loop_started = time.perf_counter()
@@ -102,14 +104,20 @@ class MonitoringWorker(QThread):
                     self.msleep(25)
                     continue
 
+                if not self._first_frame_logged:
+                    self._first_frame_logged = True
+                    logger.info("First frame received")
+
                 now = time.time()
+                with self._analyzer_lock:
+                    analyzer = self._face_analyzer
                 should_analyze = (
-                    self._face_analyzer is not None
+                    analyzer is not None
                     and now - self._last_analysis >= self.analysis_interval
                 )
                 if should_analyze:
                     self._last_analysis = now
-                    sample = self._analyze(frame_rgb, now)
+                    sample = self._analyze(frame_rgb, now, analyzer)
                 else:
                     sample = MonitoringSample(frame_rgb=frame_rgb)
                 self.sample_ready.emit(sample)
@@ -118,18 +126,60 @@ class MonitoringWorker(QThread):
                 if remaining > 0:
                     self.msleep(max(1, int(remaining * 1000)))
         except Exception as exc:
-            logger.exception("Error inesperado en el worker de monitoreo")
+            logger.exception("Monitoring worker failed")
             self.error.emit(f"Error durante el monitoreo: {exc}")
         finally:
-            analyzer = self._face_analyzer
-            self._face_analyzer = None
+            self.camera_service.stop()
+            initializer = self._initializer_thread
+            if initializer is not None and initializer.is_alive():
+                initializer.join(timeout=2.0)
+            with self._analyzer_lock:
+                analyzer = self._face_analyzer
+                self._face_analyzer = None
             if analyzer is not None:
                 analyzer.close()
-            self.camera_service.stop()
-            logger.info("Worker de monitoreo detenido")
+            logger.info("Monitoring worker stopped")
 
-    def _analyze(self, frame_rgb, current_time):
-        result = self._face_analyzer.analyze_frame(frame_rgb)
+    def _start_analyzer_initialization(self):
+        self.analysis_status.emit("initializing", "Inicializando análisis facial...")
+
+        def initialize():
+            try:
+                factory = self.face_analyzer_factory
+                analyzer = factory() if callable(factory) else factory
+                if self._stop_event.is_set():
+                    analyzer.close()
+                    return
+                with self._analyzer_lock:
+                    self._face_analyzer = analyzer
+                logger.info("FaceLandmarker initialized")
+                self.analysis_status.emit("ready", "Esperando detección facial")
+            except Exception as exc:
+                logger.exception("FaceLandmarker initialization failed")
+                if not self._stop_event.is_set():
+                    self.analysis_status.emit(
+                        "error", f"Error de análisis facial: {exc}"
+                    )
+
+        self._initializer_thread = threading.Thread(
+            target=initialize,
+            name="face-landmarker-initializer",
+            daemon=True,
+        )
+        self._initializer_thread.start()
+
+    def _analyze(self, frame_rgb, current_time, analyzer):
+        try:
+            result = analyzer.analyze_frame(frame_rgb)
+        except Exception as exc:
+            logger.exception("FaceLandmarker frame analysis failed")
+            self.analysis_status.emit("error", f"Error de análisis facial: {exc}")
+            with self._analyzer_lock:
+                if self._face_analyzer is analyzer:
+                    self._face_analyzer = None
+            analyzer.close()
+            return MonitoringSample(frame_rgb=frame_rgb)
+
         face_detected = result is not None
         eye_metrics = get_eye_state(result)
         blink_duration = self.blink_detector.process_state(
@@ -157,7 +207,7 @@ class MonitoringWorker(QThread):
             result, width, height, current_time
         )
         rendered_frame = (
-            self._face_analyzer.draw_landmarks(frame_rgb, result)
+            analyzer.draw_landmarks(frame_rgb, result)
             if result is not None else frame_rgb
         )
         return MonitoringSample(

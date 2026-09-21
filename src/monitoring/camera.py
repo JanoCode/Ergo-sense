@@ -29,10 +29,10 @@ class CameraService:
                 return True
 
             for index in self._candidate_indices():
-                logger.info("Intentando abrir cámara con índice %s", index)
+                logger.info("Trying camera index %s", index)
                 capture = cv2.VideoCapture(index)
                 if not capture.isOpened():
-                    logger.warning("Cámara %s no disponible", index)
+                    logger.warning("Camera index %s is not available", index)
                     capture.release()
                     continue
 
@@ -44,7 +44,7 @@ class CameraService:
                 height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
                 fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
                 logger.info(
-                    "Cámara %s abierta: %sx%s, FPS informado %.1f",
+                    "Camera opened successfully: index=%s resolution=%sx%s fps=%.1f",
                     index, width, height, fps,
                 )
                 return True
@@ -53,7 +53,7 @@ class CameraService:
             self.selected_index = None
             self._is_running = False
             logger.error(
-                "No se encontró una cámara disponible en los índices %s",
+                "No camera available at indices %s",
                 self._candidate_indices(),
             )
             return False
@@ -67,7 +67,7 @@ class CameraService:
             self._is_running = False
         if capture is not None:
             capture.release()
-            logger.info("Cámara %s liberada", camera_index)
+            logger.info("Camera %s released", camera_index)
 
     def get_frame(self) -> Optional[np.ndarray]:
         capture = self.cap

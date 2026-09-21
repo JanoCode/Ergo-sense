@@ -1,5 +1,7 @@
 import os
 import sys
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock
 
@@ -35,16 +37,13 @@ class TestMonitoringWorker(unittest.TestCase):
         camera.start.return_value = True
         camera.properties.return_value = (1, 640, 480, 30.0)
         analyzer = MagicMock()
-        analyzer.analyze_frame.return_value = None
+        analyzer.analyze_frame.side_effect = lambda _: (
+            worker.request_stop() or None
+        )
         factory = MagicMock(return_value=analyzer)
         worker = self._worker(camera, factory)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-
-        def one_frame():
-            worker.request_stop()
-            return frame
-
-        camera.get_frame.side_effect = one_frame
+        camera.get_frame.return_value = frame
         samples = []
         worker.sample_ready.connect(samples.append)
 
@@ -54,9 +53,47 @@ class TestMonitoringWorker(unittest.TestCase):
         analyzer.analyze_frame.assert_called_once()
         analyzer.close.assert_called_once()
         camera.stop.assert_called_once()
-        self.assertEqual(len(samples), 1)
-        self.assertTrue(samples[0].analyzed)
-        self.assertFalse(samples[0].face_detected)
+        self.assertGreaterEqual(len(samples), 1)
+        self.assertTrue(any(sample.analyzed for sample in samples))
+
+    def test_first_frame_is_emitted_while_analyzer_is_still_initializing(self):
+        camera = MagicMock()
+        camera.start.return_value = True
+        camera.properties.return_value = (0, 640, 480, 30.0)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        analyzer = MagicMock()
+        initialized = threading.Event()
+
+        def slow_factory():
+            time.sleep(0.2)
+            initialized.set()
+            return analyzer
+
+        worker = self._worker(camera, slow_factory)
+        reads = 0
+
+        def read_frame():
+            nonlocal reads
+            reads += 1
+            if reads >= 2:
+                worker.request_stop()
+            return frame
+
+        camera.get_frame.side_effect = read_frame
+        samples_before_initialization = []
+        worker.sample_ready.connect(
+            lambda sample: samples_before_initialization.append(
+                (sample, initialized.is_set())
+            )
+        )
+
+        worker.run()
+
+        self.assertGreaterEqual(len(samples_before_initialization), 1)
+        first_sample, analyzer_was_ready = samples_before_initialization[0]
+        self.assertFalse(analyzer_was_ready)
+        self.assertFalse(first_sample.analyzed)
+        analyzer.close.assert_called_once()
 
     def test_worker_does_not_initialize_model_without_camera(self):
         camera = MagicMock()

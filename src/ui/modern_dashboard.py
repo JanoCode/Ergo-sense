@@ -195,11 +195,20 @@ class ModernDashboardWidget(DashboardWidget):
         self.lbl_video.setAlignment(Qt.AlignCenter)
         self.lbl_video.setMinimumSize(320, 240)
         self.lbl_video.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_camera_status = QLabel("Iniciando cámara...")
+        self.lbl_camera_status.setObjectName("cameraStatus")
+        self.lbl_camera_status.setAlignment(Qt.AlignCenter)
         self.lbl_face_status = QLabel("Rostro no detectado")
         self.lbl_face_status.setObjectName("mutedText")
         self.lbl_face_status.setAlignment(Qt.AlignCenter)
+        self.btn_retry_camera = QPushButton("Reintentar cámara")
+        self.btn_retry_camera.setObjectName("secondaryButton")
+        self.btn_retry_camera.clicked.connect(self._retry_monitoring)
+        self.btn_retry_camera.setVisible(False)
         video_layout.addWidget(self.lbl_video, 1)
+        video_layout.addWidget(self.lbl_camera_status)
         video_layout.addWidget(self.lbl_face_status)
+        video_layout.addWidget(self.btn_retry_camera, alignment=Qt.AlignCenter)
         upper.addWidget(video_card, 3)
 
         score_card = self._card()
@@ -231,6 +240,7 @@ class ModernDashboardWidget(DashboardWidget):
         monitor_layout.addLayout(upper, 1)
 
         summary = QGridLayout()
+        self.monitor_summary_layout = summary
         summary.setSpacing(12)
         self.lbl_perclos_60s = self._metric("Cierre ocular (PERCLOS)", "---")
         self.lbl_perclos_60s.setToolTip(
@@ -238,7 +248,7 @@ class ModernDashboardWidget(DashboardWidget):
         )
         self.lbl_bpm = self._metric("Parpadeos por minuto", "---")
         self.lbl_yawns = self._metric("Bostezos", "0")
-        self.lbl_head_dev = self._metric("Postura", "Calibrando")
+        self.lbl_head_dev = self._metric("Postura", "Esperando detección facial")
         for column, widget in enumerate(
             (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev)
         ):
@@ -248,8 +258,10 @@ class ModernDashboardWidget(DashboardWidget):
 
         self.advanced_toggle = QToolButton()
         self.advanced_toggle.setText("Ver métricas avanzadas")
+        self.advanced_toggle.setObjectName("advancedButton")
         self.advanced_toggle.setCheckable(True)
         self.advanced_toggle.setArrowType(Qt.RightArrow)
+        self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.advanced_toggle.toggled.connect(self._toggle_advanced)
         monitor_layout.addWidget(self.advanced_toggle, alignment=Qt.AlignLeft)
 
@@ -438,11 +450,20 @@ class ModernDashboardWidget(DashboardWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        compact = event.size().width() < 1050
+        compact = event.size().width() < 1300
         if compact:
             self.home_cards_layout.addWidget(self.home_welcome_card, 0, 0)
             self.home_cards_layout.addWidget(self.home_fatigue_card, 1, 0)
             self.monitor_upper_layout.setDirection(QVBoxLayout.TopToBottom)
+            for index, widget in enumerate(
+                (
+                    self.lbl_perclos_60s, self.lbl_bpm,
+                    self.lbl_yawns, self.lbl_head_dev,
+                )
+            ):
+                self.monitor_summary_layout.addWidget(
+                    widget, index // 2, index % 2
+                )
             self.history_content_layout.setDirection(QHBoxLayout.TopToBottom)
             for index, widget in enumerate(
                 (
@@ -460,6 +481,13 @@ class ModernDashboardWidget(DashboardWidget):
             self.home_cards_layout.addWidget(self.home_welcome_card, 0, 0)
             self.home_cards_layout.addWidget(self.home_fatigue_card, 0, 1)
             self.monitor_upper_layout.setDirection(QHBoxLayout.LeftToRight)
+            for index, widget in enumerate(
+                (
+                    self.lbl_perclos_60s, self.lbl_bpm,
+                    self.lbl_yawns, self.lbl_head_dev,
+                )
+            ):
+                self.monitor_summary_layout.addWidget(widget, 0, index)
             self.history_content_layout.setDirection(QHBoxLayout.LeftToRight)
             for index, widget in enumerate(
                 (
@@ -658,7 +686,9 @@ class ModernDashboardWidget(DashboardWidget):
             QProgressBar { background: #e5eaf1; border: none; border-radius: 5px; min-height: 10px; max-height: 10px; }
             QProgressBar::chunk { background: #2f6fed; border-radius: 5px; }
             QScrollArea { background: transparent; border: none; }
-            QToolButton { color: #2f6fed; background: transparent; border: none; font-weight: 600; padding: 6px; }
+            QLabel#cameraStatus { color: #216e4e; font-weight: 650; }
+            QToolButton#advancedButton { color: #20304a; background: #e8eef8; border: none; border-radius: 8px; font-weight: 650; padding: 9px 14px; }
+            QToolButton#advancedButton:hover { background: #d9e3f2; }
             QToolTip { background: #172033; color: white; border: 1px solid #34425b; padding: 6px; }
         """
 
