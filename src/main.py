@@ -13,6 +13,8 @@ from infrastructure.session_repository import SQLiteSessionRepository
 from application.session_service import SessionService
 from infrastructure.camera_service import CameraService
 from infrastructure.face_analyzer import FaceAnalyzer
+from infrastructure.baseline_repository import SQLiteBaselineRepository
+from application.baseline_service import BaselineService
 
 def main():
     # Inicializar la base de datos al arrancar
@@ -28,13 +30,15 @@ def main():
     
     camera_service = CameraService()
     face_analyzer = FaceAnalyzer()
+    baseline_repo = SQLiteBaselineRepository(db_manager)
+    baseline_service = BaselineService(baseline_repo)
 
     app = QApplication(sys.path)
     
     # Configuración global de la aplicación
     app.setApplicationName("ErgoSense")
     
-    window = MainWindow(user_service, session_service, camera_service, face_analyzer)
+    window = MainWindow(user_service, session_service, camera_service, face_analyzer, baseline_service)
     window.show()
     
     sys.exit(app.exec())

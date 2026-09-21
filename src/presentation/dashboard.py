@@ -9,14 +9,16 @@ from domain.metrics import EyeState
 from domain.mar_calculator import get_mouth_state
 from domain.yawn_detector import YawnDetector
 from domain.head_pose_estimator import HeadPoseEstimator
+from domain.baseline import BaselineState
 
 class DashboardWidget(QWidget):
-    def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None):
+    def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None, baseline_service=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
         self.camera_service = camera_service
         self.face_analyzer = face_analyzer
+        self.baseline_service = baseline_service
         self.blink_detector = BlinkDetector()
         self.perclos_calc = PerclosCalculator()
         self.prolonged_detector = ProlongedClosureDetector()
@@ -24,6 +26,7 @@ class DashboardWidget(QWidget):
         self.head_pose_estimator = HeadPoseEstimator()
         self._last_frame_time: float = 0.0
         self._last_state = EyeState.UNKNOWN
+        self._last_baseline_rate_sample = 0.0
         self._frame_width = 640
         self._frame_height = 480
         
@@ -71,6 +74,10 @@ class DashboardWidget(QWidget):
         
         status_layout.addSpacing(10)
         
+        self.lbl_baseline_status = QLabel("")
+        self.lbl_baseline_status.setStyleSheet("font-size: 12px; color: #7f8c8d; border: none;")
+        status_layout.addWidget(self.lbl_baseline_status)
+
         status_title = QLabel("Estado de Monitoreo")
         status_title.setStyleSheet("font-size: 18px; font-weight: bold; border: none;")
         status_layout.addWidget(status_title)
@@ -381,6 +388,9 @@ class DashboardWidget(QWidget):
     def _select_user(self, user):
         if self.user_service:
             self.user_service.set_active_user(user)
+            if self.baseline_service:
+                self.baseline_service.start_for_user(user.id)
+                self._update_baseline_label()
             self._update_active_user_display()
 
     def _update_active_user_display(self):
@@ -471,6 +481,14 @@ class DashboardWidget(QWidget):
             self.head_pose_estimator.reset()
             self._last_frame_time = 0.0
             self._last_state = EyeState.UNKNOWN
+            self._last_baseline_rate_sample = current_session_start
+
+            # Iniciar baseline para el usuario activo
+            active_user = self.user_service.get_active_user() if self.user_service else None
+            if self.baseline_service and active_user:
+                self.baseline_service.start_for_user(active_user.id)
+                self._update_baseline_label()
+
             self.timer.start(1000)
             
             if self.camera_service:
@@ -498,6 +516,9 @@ class DashboardWidget(QWidget):
                 self.lbl_video.setVisible(False)
                 self.lbl_video.setText("Cámara inactiva")
                 self.metrics_container.setVisible(False)
+
+            if self.baseline_service:
+                self.baseline_service.finish()
                 
             self._update_session_ui_state()
             self._load_history()
@@ -557,7 +578,7 @@ class DashboardWidget(QWidget):
                 self.lbl_ear.setText(f"EAR: {eye_metrics.ear_avg:.3f}" if eye_metrics.ear_avg is not None else "EAR: ---")
                 self.lbl_eye_state.setText(f"Estado: {eye_metrics.state.value}")
                 
-                self.blink_detector.process_state(eye_metrics.state, current_time)
+                blink_duration = self.blink_detector.process_state(eye_metrics.state, current_time)
                 blink_metrics = self.blink_detector.get_metrics(current_time)
                 
                 self.lbl_blinks.setText(f"Parpadeos: {blink_metrics.total_blinks}")
@@ -616,6 +637,28 @@ class DashboardWidget(QWidget):
                     self.lbl_yaw.setText("Yaw: ---")
                     self.lbl_roll.setText("Roll: ---")
                     self.lbl_head_dev.setText("Desviación: ---")
+
+                # Alimentar baseline con muestras válidas del frame actual
+                if self.baseline_service:
+                    angles = head_result.angles if head_result else None
+                    # La frecuencia acumulada se muestrea periódicamente, no por frame,
+                    # para no sobrerrepresentar un único valor de sesión.
+                    sample_blink_rate = current_time - self._last_baseline_rate_sample >= 10.0
+                    self.baseline_service.add_sample(
+                        ear=eye_metrics.ear_avg,
+                        eye_state=eye_metrics.state,
+                        mar=mar_val,
+                        mouth_state=mouth_state,
+                        pitch=angles.pitch if angles else None,
+                        yaw=angles.yaw if angles else None,
+                        roll=angles.roll if angles else None,
+                        blink_duration=blink_duration,
+                        blink_bpm=blink_metrics.blinks_per_minute if sample_blink_rate else None,
+                        perclos=perclos.perclos_60s,
+                    )
+                    if sample_blink_rate:
+                        self._last_baseline_rate_sample = current_time
+                    self._update_baseline_label()
                     
             from PySide6.QtGui import QImage, QPixmap
             h, w, ch = frame_rgb.shape
@@ -623,3 +666,21 @@ class DashboardWidget(QWidget):
             qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             self.lbl_video.setPixmap(pixmap.scaled(self.lbl_video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def _update_baseline_label(self):
+        if not self.baseline_service:
+            self.lbl_baseline_status.setText("")
+            return
+        state = self.baseline_service.get_state()
+        if state is None:
+            self.lbl_baseline_status.setText("")
+        elif state == BaselineState.READY:
+            self.lbl_baseline_status.setText("✓ Baseline listo")
+            self.lbl_baseline_status.setStyleSheet("font-size: 12px; color: #27ae60; border: none;")
+        elif state == BaselineState.CALIBRATING:
+            pct = int(self.baseline_service.get_progress() * 100)
+            self.lbl_baseline_status.setText(f"⟳ Calibrando baseline... {pct}%")
+            self.lbl_baseline_status.setStyleSheet("font-size: 12px; color: #e67e22; border: none;")
+        else:
+            self.lbl_baseline_status.setText("○ Calibrando baseline... 0%")
+            self.lbl_baseline_status.setStyleSheet("font-size: 12px; color: #7f8c8d; border: none;")

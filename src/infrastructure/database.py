@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 class DatabaseManager:
@@ -22,7 +23,7 @@ class DatabaseManager:
 
     def initialize_database(self):
         """Crea la base de datos y las tablas necesarias si no existen."""
-        with self.get_connection() as conn:
+        with closing(self.get_connection()) as conn:
             cursor = conn.cursor()
             
             # Crear tabla de usuarios
@@ -46,4 +47,24 @@ class DatabaseManager:
                 )
             ''')
             
+            # Crear tabla de baselines personales
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS baselines (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL UNIQUE,
+                    state TEXT NOT NULL DEFAULT 'INSUFFICIENT_DATA',
+                    ear_mean REAL, ear_std REAL, ear_samples INTEGER,
+                    blink_rate_mean REAL, blink_rate_std REAL, blink_rate_samples INTEGER,
+                    blink_duration_mean REAL, blink_duration_std REAL, blink_duration_samples INTEGER,
+                    perclos_mean REAL, perclos_std REAL, perclos_samples INTEGER,
+                    mar_mean REAL, mar_std REAL, mar_samples INTEGER,
+                    pitch_mean REAL, pitch_std REAL, pitch_samples INTEGER,
+                    yaw_mean REAL, yaw_std REAL, yaw_samples INTEGER,
+                    roll_mean REAL, roll_std REAL, roll_samples INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+
             conn.commit()
