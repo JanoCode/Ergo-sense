@@ -62,6 +62,22 @@ class TestModernDashboard(unittest.TestCase):
             self.dashboard.advanced_toggle.text(), "Ocultar métricas avanzadas"
         )
 
+    def test_empty_and_populated_charts_keep_dark_palette(self):
+        from datetime import datetime
+        from ui.theme import SURFACE
+        chart = self.dashboard.chart_score
+        self.assertEqual(chart.chart().backgroundBrush().color().name(), SURFACE)
+        for points in ([], [(datetime.now(), 32)]):
+            self.dashboard._set_line_chart(chart, "Score", points, "Score")
+            self.assertEqual(chart.chart().backgroundBrush().color().name(), SURFACE)
+
+    def test_metric_card_preserves_value_and_interpretation(self):
+        card = self.dashboard.lbl_bpm
+        card.setText("Parpadeos: 13.6/min")
+        card.setInterpretation("Dentro de tu rango habitual")
+        self.assertEqual(card.text(), "13.6/min")
+        self.assertEqual(card._interpretation.text(), "Dentro de tu rango habitual")
+
 
 if __name__ == "__main__":
     unittest.main()

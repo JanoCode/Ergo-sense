@@ -17,16 +17,7 @@ class CreateUserDialog(QDialog):
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Ej. Juan Perez")
         self.name_input.setMinimumHeight(30)
-        self.name_input.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #bdc3c7;
-                border-radius: 4px;
-                padding: 0 8px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #3498db;
-            }
-        """)
+
         layout.addWidget(self.name_input)
         
         btn_layout = QHBoxLayout()
@@ -34,35 +25,12 @@ class CreateUserDialog(QDialog):
         
         self.btn_cancel = QPushButton("Cancelar")
         self.btn_cancel.setMinimumHeight(30)
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #ecf0f1;
-                color: #2c3e50;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 15px;
-            }
-            QPushButton:hover {
-                background-color: #bdc3c7;
-            }
-        """)
+        self.btn_cancel.setObjectName("secondaryButton")
         self.btn_cancel.clicked.connect(self.reject)
         
         self.btn_save = QPushButton("Guardar")
         self.btn_save.setMinimumHeight(30)
-        self.btn_save.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                font-weight: bold;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 15px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
+        self.btn_save.setObjectName("primaryButton")
         self.btn_save.clicked.connect(self._on_save_clicked)
         
         btn_layout.addWidget(self.btn_cancel)

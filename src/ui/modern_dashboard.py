@@ -200,7 +200,7 @@ class ModernDashboardWidget(DashboardWidget):
         self.lbl_camera_status.setObjectName("cameraStatus")
         self.lbl_camera_status.setAlignment(Qt.AlignCenter)
         self.lbl_face_status = QLabel("Rostro no detectado")
-        self.lbl_face_status.setObjectName("mutedText")
+        self.lbl_face_status.setObjectName("stateBadge")
         self.lbl_face_status.setAlignment(Qt.AlignCenter)
         self.btn_retry_camera = QPushButton("Reintentar cámara")
         self.btn_retry_camera.setObjectName("secondaryButton")
@@ -221,7 +221,7 @@ class ModernDashboardWidget(DashboardWidget):
         self.lbl_fatigue_score = QLabel("--- / 100")
         self.lbl_fatigue_score.setObjectName("monitorScore")
         self.lbl_fatigue_level = QLabel("Nivel: sin evaluación")
-        self.lbl_fatigue_level.setObjectName("sectionTitle")
+        self.lbl_fatigue_level.setObjectName("stateBadge")
         self.lbl_fatigue_confidence = QLabel("Confianza: ---")
         self.lbl_fatigue_confidence.setObjectName("mutedText")
         self.lbl_monitor_time = QLabel("00:00:00")
@@ -235,10 +235,9 @@ class ModernDashboardWidget(DashboardWidget):
             self.btn_monitor_end,
         ):
             score_layout.addWidget(widget)
-        score_layout.addStretch()
         self.lbl_current_state = QLabel("Estado actual · esperando evaluación")
         self.lbl_current_state.setWordWrap(True)
-        self.lbl_current_state.setObjectName("sectionTitle")
+        self.lbl_current_state.setObjectName("stateBadge")
         self.monitor_score_bar = QProgressBar()
         self.monitor_score_bar.setRange(0, 100)
         self.monitor_score_bar.setTextVisible(False)
@@ -262,6 +261,7 @@ class ModernDashboardWidget(DashboardWidget):
         )
         self.lbl_bpm = self._metric("Parpadeos por minuto", "---")
         self.lbl_yawns = self._metric("Bostezos", "0")
+        self.lbl_yawns.setInterpretation("Aperturas sostenidas detectadas")
         self.lbl_head_dev = self._metric("Postura", "Esperando detección facial")
         for column, widget in enumerate(
             (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev)
@@ -438,6 +438,11 @@ class ModernDashboardWidget(DashboardWidget):
         )
 
     def _start_session(self):
+        from ui.theme import style_level
+        style_level(self.lbl_current_state)
+        style_level(self.lbl_fatigue_level)
+        for card in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_head_dev):
+            card.setInterpretation("Esperando datos")
         self._displayed_yawns = 0
         self.lbl_yawn_feedback.clear()
         self.yawn_feedback_timer.stop()
@@ -456,6 +461,7 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _update_session_ui_state(self):
         super()._update_session_ui_state()
+        self.lbl_status.setStyleSheet("")
         active = bool(
             self.session_service and self.session_service.get_active_session()
         )
@@ -478,9 +484,39 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _update_active_user_display(self):
         super()._update_active_user_display()
+        self.lbl_active_user.setStyleSheet("")
         user = self.user_service.get_active_user() if self.user_service else None
         self.lbl_home_user.setText(f"Hola, {user.name}" if user else "Hola")
         self._update_session_ui_state()
+
+    def _update_baseline_label(self):
+        super()._update_baseline_label()
+        self.lbl_baseline_status.setStyleSheet("")
+
+    def _create_user_widget(self, user):
+        card = self._card()
+        layout = QHBoxLayout(card)
+        name = QLabel(user.name)
+        name.setObjectName("sectionTitle")
+        name.setWordWrap(True)
+        details = QVBoxLayout()
+        details.addWidget(name)
+        if user.created_at:
+            created = QLabel("Creado: " + user.created_at.strftime("%d/%m/%Y"))
+            created.setObjectName("mutedText")
+            details.addWidget(created)
+        layout.addLayout(details, 1)
+        select = QPushButton("Seleccionar perfil")
+        select.setObjectName("secondaryButton")
+        select.clicked.connect(lambda: self._select_user(user))
+        layout.addWidget(select)
+        return card
+
+    @staticmethod
+    def _set_line_chart(view, title, points, y_title):
+        from ui.theme import style_chart
+        DashboardWidget._set_line_chart(view, title, points, y_title)
+        style_chart(view.chart())
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -552,6 +588,9 @@ class ModernDashboardWidget(DashboardWidget):
         if assessment is not None:
             from ui.fatigue_feedback import level_feedback, readable_reasons
             title, recommendation, color = level_feedback(assessment.level)
+            from ui.theme import style_level
+            style_level(self.lbl_current_state, color)
+            style_level(self.lbl_fatigue_level, color)
             self.lbl_current_state.setText("Estado actual\n" + title)
             self.lbl_recommendation.setText(recommendation)
             self.monitor_score_bar.setValue(round(assessment.score))
@@ -571,6 +610,7 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _on_monitoring_sample(self, sample):
         super()._on_monitoring_sample(sample)
+        self.lbl_face_status.setStyleSheet("")
         if not sample.analyzed:
             return
         count = sample.yawn_metrics.total_yawns
@@ -580,10 +620,18 @@ class ModernDashboardWidget(DashboardWidget):
         self._displayed_yawns = count
         if not sample.face_detected:
             self.lbl_metric_context.setText("Sin detección facial: interpretación no disponible.")
+            for card in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_head_dev):
+                card.setInterpretation("Sin detección facial")
             return
         from ui.fatigue_feedback import metric_context
         baseline = self.baseline_service.get_baseline() if self.baseline_service else None
         self.lbl_metric_context.setText(metric_context(sample, baseline, self.fatigue_engine.config))
+        parts = self.lbl_metric_context.text().split(" · ")
+        for card, interpretation in zip(
+            (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_head_dev), parts
+        ):
+            card.setInterpretation(interpretation.split(": ", 1)[-1])
+        self.lbl_metric_context.hide()
 
     def _sync_score(self):
         text = self.lbl_fatigue_score.text()
@@ -719,49 +767,17 @@ class ModernDashboardWidget(DashboardWidget):
 
     @staticmethod
     def _create_chart_view():
+        from ui.theme import style_chart
         view = DashboardWidget._create_chart_view()
+        style_chart(view.chart())
         view.setRenderHint(QPainter.Antialiasing)
         view.setMinimumHeight(210)
         return view
 
     @staticmethod
     def _theme():
-        return """
-            QWidget { background: #f4f7fb; color: #172033; font-size: 13px; }
-            QFrame#sidebar { background: #172033; border: none; }
-            QLabel#brand { color: #ffffff; font-size: 25px; font-weight: 700; }
-            QLabel#sidebarCaption { color: #aebbd0; font-size: 12px; }
-            QLabel#sidebarUser { color: #dbe6f5; padding: 10px; background: #22304a; border-radius: 8px; }
-            QPushButton#navButton { text-align: left; color: #c8d3e3; background: transparent; border: none; border-radius: 8px; padding: 10px 12px; }
-            QPushButton#navButton:hover { background: #22304a; color: white; }
-            QPushButton#navButton:checked { background: #2f6fed; color: white; font-weight: 600; }
-            QLabel#pageTitle { font-size: 28px; font-weight: 700; color: #111827; }
-            QLabel#pageSubtitle, QLabel#mutedText { color: #5e6b7d; }
-            QFrame#card { background: white; border: 1px solid #dfe5ee; border-radius: 12px; padding: 10px; }
-            QFrame#emptyState { background: white; border: 1px dashed #b9c5d6; border-radius: 12px; min-height: 180px; }
-            QLabel#sectionTitle { color: #172033; font-size: 17px; font-weight: 650; }
-            QLabel#statusText { color: #216e4e; font-size: 15px; font-weight: 600; }
-            QLabel#eyebrow, QLabel#metricTitle { color: #5e6b7d; font-size: 12px; font-weight: 600; }
-            QLabel#heroScore { color: #2f6fed; font-size: 44px; font-weight: 750; }
-            QLabel#monitorScore { color: #2f6fed; font-size: 38px; font-weight: 750; }
-            QLabel#metricValue { color: #172033; font-size: 20px; font-weight: 700; }
-            QLabel#sessionTime { color: #172033; font-size: 22px; font-weight: 650; }
-            QLabel#videoSurface { background: #101827; color: #dbe6f5; border-radius: 10px; }
-            QLabel#plainMetric { background: #f7f9fc; color: #243147; padding: 9px; border-radius: 7px; }
-            QPushButton#primaryButton { background: #2f6fed; color: white; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 650; }
-            QPushButton#primaryButton:hover { background: #245ccd; }
-            QPushButton#secondaryButton { background: #e8eef8; color: #20304a; border: none; border-radius: 8px; padding: 9px 15px; font-weight: 600; }
-            QPushButton#dangerButton { background: #c93737; color: white; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 650; }
-            QPushButton:disabled { background: #cbd3df; color: #687588; }
-            QProgressBar { background: #e5eaf1; border: none; border-radius: 5px; min-height: 10px; max-height: 10px; }
-            QProgressBar::chunk { background: #2f6fed; border-radius: 5px; }
-            QScrollArea { background: transparent; border: none; }
-            QLabel#cameraStatus { color: #216e4e; font-weight: 650; }
-            QToolButton#advancedButton { color: #20304a; background: #e8eef8; border: none; border-radius: 8px; font-weight: 650; padding: 9px 14px; }
-            QToolButton#advancedButton:hover { background: #d9e3f2; }
-            QToolTip { background: #172033; color: white; border: 1px solid #34425b; padding: 6px; }
-        """
-
+        from ui.theme import QSS
+        return QSS
 
 class _MetricCard(QFrame):
     """Card-compatible label adapter used by existing presentation methods."""
@@ -777,6 +793,14 @@ class _MetricCard(QFrame):
                 item.widget().setParent(self)
                 QVBoxLayout(self) if self.layout() is None else None
                 self.layout().addWidget(item.widget())
+        self._value_label.setWordWrap(True)
+        self._interpretation = QLabel("")
+        self._interpretation.setObjectName("mutedText")
+        self._interpretation.setWordWrap(True)
+        self.layout().addWidget(self._interpretation)
+
+    def setInterpretation(self, text):
+        self._interpretation.setText(text)
 
     def setText(self, text):
         value = text.split(":", 1)[-1].strip() if ":" in text else text
