@@ -7,6 +7,7 @@ from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime
 import time
+import logging
 from fatigue.blink_detector import BlinkDetector
 from fatigue.perclos import PerclosCalculator, ProlongedClosureDetector
 from fatigue.yawn_detector import YawnDetector
@@ -16,6 +17,8 @@ from fatigue.fatigue_engine import FatigueEngine
 from fatigue.models import FatigueMetrics, SessionFinalMetrics
 from fatigue.models import AnalyticsPeriod
 from monitoring.monitoring_worker import MonitoringWorker
+
+logger = logging.getLogger(__name__)
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
@@ -429,6 +432,7 @@ class DashboardWidget(QWidget):
         while self.users_list_layout.count() > 1:
             item = self.users_list_layout.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
                 
         if not self.user_service:
@@ -437,6 +441,7 @@ class DashboardWidget(QWidget):
             
         try:
             users = self.user_service.get_all_users()
+            logger.info("Loaded users: %d", len(users))
             if not users:
                 self._show_empty_users_message()
             else:
@@ -444,11 +449,13 @@ class DashboardWidget(QWidget):
                     user_widget = self._create_user_widget(user)
                     # Insertar antes del stretch (que está al final)
                     self.users_list_layout.insertWidget(self.users_list_layout.count() - 1, user_widget)
-        except Exception as e:
-            self._show_empty_users_message()
+        except Exception:
+            logger.exception("Failed to load or display users")
+            self._show_empty_users_message("No se pudieron cargar los usuarios. Consulta el registro de errores.")
 
-    def _show_empty_users_message(self):
-        empty_lbl = QLabel("No hay usuarios registrados.")
+    def _show_empty_users_message(self, message="No hay usuarios registrados."):
+        empty_lbl = QLabel(message)
+        empty_lbl.setWordWrap(True)
         empty_lbl.setStyleSheet("color: #95a5a6; font-style: italic; border: none; padding: 10px;")
         empty_lbl.setAlignment(Qt.AlignCenter)
         self.users_list_layout.insertWidget(0, empty_lbl)

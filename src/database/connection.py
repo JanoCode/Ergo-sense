@@ -1,4 +1,5 @@
 import sqlite3
+import logging
 from contextlib import closing
 from pathlib import Path
 
@@ -9,8 +10,9 @@ class DatabaseManager:
             self.db_path = "file::memory:?cache=shared"
         else:
             # Almacenamos la base de datos en el directorio raíz del proyecto
-            base_dir = Path(__file__).parent.parent.parent
-            self.db_path = base_dir / db_name
+            base_dir = Path(__file__).resolve().parent.parent.parent
+            self.db_path = (base_dir / db_name).resolve()
+        logging.getLogger(__name__).info("Database path: %s", self.db_path)
 
     def get_connection(self):
         """Retorna una conexión a la base de datos SQLite."""

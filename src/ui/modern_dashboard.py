@@ -426,6 +426,8 @@ class ModernDashboardWidget(DashboardWidget):
         return page
 
     def _navigate(self, index):
+        if index == self.PAGE_USERS:
+            self._load_users()
         self.pages.setCurrentIndex(index)
         for button_index, button in enumerate(self.nav_buttons):
             button.setChecked(button_index == index)
@@ -502,7 +504,12 @@ class ModernDashboardWidget(DashboardWidget):
         details = QVBoxLayout()
         details.addWidget(name)
         if user.created_at:
-            created = QLabel("Creado: " + user.created_at.strftime("%d/%m/%Y"))
+            from datetime import datetime
+            try:
+                date_text = datetime.fromisoformat(user.created_at).strftime("%d/%m/%Y")
+            except (ValueError, TypeError):
+                date_text = str(user.created_at)
+            created = QLabel("Creado: " + date_text)
             created.setObjectName("mutedText")
             details.addWidget(created)
         layout.addLayout(details, 1)
