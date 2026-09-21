@@ -45,6 +45,8 @@ def main():
     )
 
     app = QApplication(sys.path)
+    app.aboutToQuit.connect(camera_service.stop)
+    app.aboutToQuit.connect(face_analyzer.close)
     
     # Configuración global de la aplicación
     app.setApplicationName("ErgoSense")

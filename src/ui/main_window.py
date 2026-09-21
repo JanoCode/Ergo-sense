@@ -8,6 +8,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.camera_service = camera_service
+        self.face_analyzer = face_analyzer
         self.setWindowTitle("ErgoSense - Monitoreo de Fatiga")
         self.resize(1024, 768)
         
@@ -30,4 +31,6 @@ class MainWindow(QMainWindow):
         self.dashboard.shutdown()
         if self.camera_service:
             self.camera_service.stop()
+        if self.face_analyzer:
+            self.face_analyzer.close()
         super().closeEvent(event)

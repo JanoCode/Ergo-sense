@@ -35,31 +35,33 @@ Toda la solución se ejecuta como un único proceso y comparte una sola base SQL
 - OpenCV para captura y tratamiento de frames.
 - MediaPipe para landmarks faciales.
 - SQLite para usuarios, sesiones, assessments, eventos y resúmenes.
-- `unittest` para pruebas automatizadas.
+- Pytest para ejecutar las pruebas automatizadas.
 
 ## Instalación
 
 1. Crea un entorno virtual:
    ```bash
-   python -m venv venv
+   python -m venv .venv
    # En Windows:
-   venv\Scripts\activate
+   .venv\Scripts\activate
    # En Linux/Mac:
-   source venv/bin/activate
+   source .venv/bin/activate
    ```
 2. Instala las dependencias:
    ```bash
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
    ```
 
-La webcam debe estar disponible para el monitoreo en tiempo real. El historial y las
-vistas analíticas pueden consultarse sin iniciar la cámara.
+El extractor utiliza la API moderna `mediapipe.tasks.vision.FaceLandmarker` y el
+modelo portable incluido en `assets/models/face_landmarker.task`. La webcam debe
+estar disponible para el monitoreo en tiempo real; si no existe una cámara, la
+aplicación sigue abierta y permite consultar el historial y las vistas analíticas.
 
 ## Ejecución
 
 Para iniciar la aplicación, ejecuta:
 ```bash
-python src/app/main.py
+python -m src.app.main
 ```
 
 ## Funcionamiento general
@@ -81,5 +83,5 @@ estado normal ni en cero.
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -t .
+python -m pytest
 ```
