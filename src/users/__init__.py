@@ -1,0 +1,1 @@
+"""Módulo funcional de usuarios."""

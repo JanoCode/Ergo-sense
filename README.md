@@ -8,16 +8,20 @@ Esta aplicación de escritorio utiliza cálculos, reglas deterministas y datos h
 
 **NOTA:** Este proyecto no utiliza Machine Learning para inferir la fatiga directamente, garantizando la explicabilidad de los resultados.
 
-## Estructura del proyecto
+## Arquitectura
 
-El proyecto sigue una arquitectura limpia (Clean Architecture) orientada a la separación de responsabilidades:
+El proyecto utiliza **Modular Monolith Architecture**: una sola aplicación de escritorio,
+un único proceso y una base de datos SQLite compartida. El código se agrupa por
+funcionalidad en lugar de dividirse en capas globales.
 
-- `src/core/`: Funciones principales, excepciones base y tipos de datos generales.
-- `src/domain/`: Entidades del dominio (Usuario, Sesión, Métricas) y lógica de negocio pura.
-- `src/application/`: Casos de uso y servicios de aplicación.
-- `src/infrastructure/`: Implementaciones concretas (Acceso a SQLite, servicios de cámara con OpenCV, etc).
-- `src/presentation/`: Interfaz de usuario (UI) basada en PySide6.
-- `tests/`: Pruebas automatizadas.
+- `src/users/`: usuarios, selección, persistencia y diálogo de creación.
+- `src/sessions/`: inicio, finalización e historial de sesiones.
+- `src/monitoring/`: webcam, frames y extracción de landmarks con MediaPipe.
+- `src/fatigue/`: EAR, parpadeos, PERCLOS, MAR, bostezos, pose y baseline personal.
+- `src/database/`: conexión y creación del esquema SQLite compartido.
+- `src/ui/`: ventana principal y dashboard de escritorio.
+- `src/app/`: composición de módulos y punto de entrada.
+- `tests/`: pruebas organizadas según los mismos módulos funcionales.
 
 ## Instalación
 
@@ -38,5 +42,11 @@ El proyecto sigue una arquitectura limpia (Clean Architecture) orientada a la se
 
 Para iniciar la aplicación, ejecuta:
 ```bash
-python src/main.py
+python src/app/main.py
+```
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -t .
 ```
