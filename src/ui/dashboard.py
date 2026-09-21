@@ -10,6 +10,8 @@ from fatigue.mouth_metrics import get_mouth_state
 from fatigue.yawn_detector import YawnDetector
 from fatigue.head_pose import HeadPoseEstimator
 from fatigue.baseline import BaselineState
+from fatigue.fatigue_engine import FatigueEngine
+from fatigue.models import FatigueMetrics
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None, face_analyzer=None, baseline_service=None):
@@ -24,9 +26,16 @@ class DashboardWidget(QWidget):
         self.prolonged_detector = ProlongedClosureDetector()
         self.yawn_detector = YawnDetector()
         self.head_pose_estimator = HeadPoseEstimator()
+        self.fatigue_engine = FatigueEngine()
         self._last_frame_time: float = 0.0
         self._last_state = EyeState.UNKNOWN
         self._last_baseline_rate_sample = 0.0
+        self._session_started_timestamp = 0.0
+        self._last_assessment_closures = 0
+        self._last_assessment_yawns = 0
+        self._assessment_sustained_down = False
+        self._assessment_sustained_deviation = False
+        self._assessment_max_pitch_deviation = 0.0
         self._frame_width = 640
         self._frame_height = 480
         
@@ -77,6 +86,23 @@ class DashboardWidget(QWidget):
         self.lbl_baseline_status = QLabel("")
         self.lbl_baseline_status.setStyleSheet("font-size: 12px; color: #7f8c8d; border: none;")
         status_layout.addWidget(self.lbl_baseline_status)
+
+        self.lbl_fatigue_score = QLabel("Fatigue Score: ---")
+        self.lbl_fatigue_score.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; border: none;")
+        status_layout.addWidget(self.lbl_fatigue_score)
+
+        self.lbl_fatigue_level = QLabel("Nivel: ---")
+        self.lbl_fatigue_level.setStyleSheet("font-size: 13px; color: #34495e; border: none;")
+        status_layout.addWidget(self.lbl_fatigue_level)
+
+        self.lbl_fatigue_confidence = QLabel("Confianza: ---")
+        self.lbl_fatigue_confidence.setStyleSheet("font-size: 12px; color: #7f8c8d; border: none;")
+        status_layout.addWidget(self.lbl_fatigue_confidence)
+
+        self.lbl_fatigue_signals = QLabel("Señales: ---")
+        self.lbl_fatigue_signals.setWordWrap(True)
+        self.lbl_fatigue_signals.setStyleSheet("font-size: 12px; color: #7f8c8d; border: none;")
+        status_layout.addWidget(self.lbl_fatigue_signals)
 
         status_title = QLabel("Estado de Monitoreo")
         status_title.setStyleSheet("font-size: 18px; font-weight: bold; border: none;")
@@ -482,6 +508,14 @@ class DashboardWidget(QWidget):
             self._last_frame_time = 0.0
             self._last_state = EyeState.UNKNOWN
             self._last_baseline_rate_sample = current_session_start
+            self._session_started_timestamp = current_session_start
+            self._last_assessment_closures = 0
+            self._last_assessment_yawns = 0
+            self._assessment_sustained_down = False
+            self._assessment_sustained_deviation = False
+            self._assessment_max_pitch_deviation = 0.0
+            self.fatigue_engine.reset(current_session_start)
+            self._reset_fatigue_ui()
 
             # Iniciar baseline para el usuario activo
             active_user = self.user_service.get_active_user() if self.user_service else None
@@ -659,6 +693,11 @@ class DashboardWidget(QWidget):
                     if sample_blink_rate:
                         self._last_baseline_rate_sample = current_time
                     self._update_baseline_label()
+
+                self._update_fatigue_assessment(
+                    current_time, perclos.perclos_60s, blink_metrics,
+                    closure_result, yawn_metrics, head_result,
+                )
                     
             from PySide6.QtGui import QImage, QPixmap
             h, w, ch = frame_rgb.shape
@@ -666,6 +705,74 @@ class DashboardWidget(QWidget):
             qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             self.lbl_video.setPixmap(pixmap.scaled(self.lbl_video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def _update_fatigue_assessment(
+        self, current_time, perclos, blink_metrics, closure_result,
+        yawn_metrics, head_result,
+    ):
+        """Entrega métricas calculadas al motor cuando vence la ventana de 30s."""
+        self._assessment_sustained_down |= head_result.sustained_down_tilt
+        self._assessment_sustained_deviation |= head_result.sustained_deviation
+        if head_result.deviation_from_reference:
+            self._assessment_max_pitch_deviation = max(
+                self._assessment_max_pitch_deviation,
+                abs(head_result.deviation_from_reference.pitch),
+            )
+        if not self.fatigue_engine.is_due(current_time):
+            return
+
+        observation = current_time - self._session_started_timestamp
+        metrics = FatigueMetrics(
+            perclos=perclos,
+            prolonged_closures=max(
+                closure_result.count - self._last_assessment_closures, 0
+            ),
+            average_blink_duration=(
+                blink_metrics.avg_blink_duration
+                if blink_metrics.total_blinks > 0 else None
+            ),
+            blink_rate=blink_metrics.blinks_per_minute,
+            yawns_per_hour=yawn_metrics.yawns_per_hour,
+            average_yawn_duration=(
+                yawn_metrics.avg_duration if yawn_metrics.total_yawns > 0 else None
+            ),
+            current_pitch_degrees=(
+                head_result.angles.pitch if head_result.angles else None
+            ),
+            pitch_deviation_degrees=(
+                self._assessment_max_pitch_deviation
+                if head_result.has_reference else None
+            ),
+            sustained_pitch_deviation=self._assessment_sustained_deviation,
+            sustained_head_drop=self._assessment_sustained_down,
+            session_duration_seconds=observation,
+            observation_duration_seconds=observation,
+        )
+        baseline = self.baseline_service.get_baseline() if self.baseline_service else None
+        assessment = self.fatigue_engine.evaluate_if_due(
+            metrics, baseline=baseline, timestamp=current_time
+        )
+        if assessment is None:
+            return
+
+        self._last_assessment_closures = closure_result.count
+        self._last_assessment_yawns = yawn_metrics.total_yawns
+        self._assessment_sustained_down = False
+        self._assessment_sustained_deviation = False
+        self._assessment_max_pitch_deviation = 0.0
+        self.lbl_fatigue_score.setText(f"Fatigue Score: {assessment.score:.0f}/100")
+        self.lbl_fatigue_level.setText(f"Nivel: {assessment.level.value}")
+        self.lbl_fatigue_confidence.setText(
+            f"Confianza: {assessment.confidence * 100:.0f}%"
+        )
+        signals = ", ".join(assessment.active_signals[:3]) or "ninguna"
+        self.lbl_fatigue_signals.setText(f"Señales: {signals}")
+
+    def _reset_fatigue_ui(self):
+        self.lbl_fatigue_score.setText("Fatigue Score: ---")
+        self.lbl_fatigue_level.setText("Nivel: ---")
+        self.lbl_fatigue_confidence.setText("Confianza: ---")
+        self.lbl_fatigue_signals.setText("Señales: evaluando ventana inicial...")
 
     def _update_baseline_label(self):
         if not self.baseline_service:

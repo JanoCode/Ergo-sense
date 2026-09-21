@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 class EyeState(Enum):
     OPEN = "OPEN"
@@ -59,3 +59,36 @@ class HeadPoseResult:
     has_reference: bool
     sustained_down_tilt: bool
     sustained_deviation: bool
+
+class FatigueLevel(Enum):
+    NORMAL = "NORMAL"
+    MILD = "MILD"
+    MODERATE = "MODERATE"
+    HIGH = "HIGH"
+    VERY_HIGH = "VERY_HIGH"
+
+@dataclass
+class FatigueMetrics:
+    """Métricas ya calculadas para una ventana de evaluación."""
+    perclos: Optional[float] = None
+    prolonged_closures: Optional[int] = None
+    average_blink_duration: Optional[float] = None
+    blink_rate: Optional[float] = None
+    yawns_per_hour: Optional[float] = None
+    average_yawn_duration: Optional[float] = None
+    current_pitch_degrees: Optional[float] = None
+    pitch_deviation_degrees: Optional[float] = None
+    sustained_pitch_deviation: Optional[bool] = None
+    sustained_head_drop: Optional[bool] = None
+    session_duration_seconds: Optional[float] = None
+    observation_duration_seconds: Optional[float] = None
+
+@dataclass
+class FatigueAssessment:
+    timestamp: float
+    score: float
+    level: FatigueLevel
+    confidence: float
+    active_signals: List[str]
+    unavailable_signals: List[str]
+    reasons: List[str]
