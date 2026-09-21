@@ -19,7 +19,8 @@ funcionalidad en lugar de dividirse en capas globales.
 
 - `src/users/`: usuarios, selección, persistencia y diálogo de creación.
 - `src/sessions/`: inicio, finalización e historial de sesiones.
-- `src/monitoring/`: webcam, frames y extracción de landmarks con MediaPipe.
+- `src/monitoring/`: webcam, selección de dispositivo y worker `QThread` para
+  captura, landmarks y métricas sin bloquear la interfaz.
 - `src/fatigue/`: métricas, baseline, motor de score, persistencia y analytics.
 - `src/database/`: conexión y creación del esquema SQLite compartido.
 - `src/ui/`: ventana principal, monitoreo, historial, gráficos e insights.

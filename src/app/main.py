@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 
 # Permitir la ejecución directa con ``python src/app/main.py``.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,6 +23,10 @@ from fatigue.analytics import (
 )
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     # Inicializar la base de datos al arrancar
     db_manager = DatabaseManager()
     db_manager.initialize_database()
@@ -34,7 +39,7 @@ def main():
     session_service = SessionService(session_repo, user_service)
     
     camera_service = CameraService()
-    face_analyzer = FaceAnalyzer()
+    face_analyzer = FaceAnalyzer
     baseline_repo = SQLiteBaselineRepository(db_manager)
     baseline_service = BaselineService(baseline_repo)
     fatigue_history_service = FatigueHistoryService(
@@ -45,8 +50,6 @@ def main():
     )
 
     app = QApplication(sys.path)
-    app.aboutToQuit.connect(camera_service.stop)
-    app.aboutToQuit.connect(face_analyzer.close)
     
     # Configuración global de la aplicación
     app.setApplicationName("ErgoSense")
@@ -55,6 +58,7 @@ def main():
         user_service, session_service, camera_service, face_analyzer,
         baseline_service, fatigue_history_service, fatigue_analytics_service,
     )
+    app.aboutToQuit.connect(window.dashboard.shutdown)
     window.show()
     
     sys.exit(app.exec())

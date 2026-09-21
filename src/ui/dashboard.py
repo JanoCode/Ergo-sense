@@ -3,21 +3,19 @@ from PySide6.QtWidgets import (
     QScrollArea, QMessageBox, QTabWidget,
 )
 from PySide6.QtCore import Qt, QTimer, QDateTime
-from PySide6.QtGui import QPainter
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime
 import time
 from fatigue.blink_detector import BlinkDetector
-from fatigue.eye_metrics import get_eye_state
 from fatigue.perclos import PerclosCalculator, ProlongedClosureDetector
-from fatigue.models import EyeState
-from fatigue.mouth_metrics import get_mouth_state
 from fatigue.yawn_detector import YawnDetector
 from fatigue.head_pose import HeadPoseEstimator
 from fatigue.baseline import BaselineState
 from fatigue.fatigue_engine import FatigueEngine
 from fatigue.models import FatigueMetrics, SessionFinalMetrics
 from fatigue.models import AnalyticsPeriod
+from monitoring.monitoring_worker import MonitoringWorker
 
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
@@ -27,7 +25,8 @@ class DashboardWidget(QWidget):
         self.user_service = user_service
         self.session_service = session_service
         self.camera_service = camera_service
-        self.face_analyzer = face_analyzer
+        self.face_analyzer_factory = face_analyzer
+        self.monitoring_worker = None
         self.baseline_service = baseline_service
         self.fatigue_history_service = fatigue_history_service
         self.fatigue_analytics_service = fatigue_analytics_service
@@ -37,7 +36,6 @@ class DashboardWidget(QWidget):
         self.yawn_detector = YawnDetector()
         self.head_pose_estimator = HeadPoseEstimator()
         self.fatigue_engine = FatigueEngine()
-        self._last_frame_time: float = 0.0
         self._last_baseline_rate_sample = 0.0
         self._session_started_timestamp = 0.0
         self._last_assessment_closures = 0
@@ -49,9 +47,6 @@ class DashboardWidget(QWidget):
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_session_time)
-        
-        self.camera_timer = QTimer(self)
-        self.camera_timer.timeout.connect(self._update_frame)
         
         self._setup_ui()
         self._load_users()
@@ -659,7 +654,6 @@ class DashboardWidget(QWidget):
             self.prolonged_detector.reset()
             self.yawn_detector.reset(session_start=current_session_start)
             self.head_pose_estimator.reset()
-            self._last_frame_time = 0.0
             self._last_baseline_rate_sample = current_session_start
             self._session_started_timestamp = current_session_start
             self._last_assessment_closures = 0
@@ -680,12 +674,10 @@ class DashboardWidget(QWidget):
             self.timer.start(1000)
             
             if self.camera_service:
-                if self.camera_service.start():
-                    self.lbl_video.setVisible(True)
-                    self.metrics_container.setVisible(True)
-                    self.camera_timer.start(33) # ~30 fps
-                else:
-                    QMessageBox.warning(self, "Cámara no disponible", "No se pudo iniciar la cámara. La sesión continuará sin video.")
+                self.lbl_video.setText("Iniciando cámara...")
+                self.lbl_video.setVisible(True)
+                self.metrics_container.setVisible(True)
+                self._start_monitoring_worker()
                     
             self._update_session_ui_state()
         except Exception as e:
@@ -696,13 +688,13 @@ class DashboardWidget(QWidget):
             return
         try:
             current_time = time.time()
+            if self.camera_service:
+                self._stop_monitoring_worker()
             blink_metrics = self.blink_detector.get_metrics(current_time)
             ended_session = self.session_service.end_session()
             self.timer.stop()
             
             if self.camera_service:
-                self.camera_service.stop()
-                self.camera_timer.stop()
                 self.lbl_video.setVisible(False)
                 self.lbl_video.setText("Cámara inactiva")
                 self.metrics_container.setVisible(False)
@@ -791,45 +783,83 @@ class DashboardWidget(QWidget):
             minutes, seconds = divmod(remainder, 60)
             self.lbl_elapsed.setText(f"Transcurrido: {hours:02d}:{minutes:02d}:{seconds:02d}")
 
-    def _update_frame(self):
-        if not self.camera_service or not self.camera_service.is_running():
+    def _start_monitoring_worker(self):
+        if self.monitoring_worker and self.monitoring_worker.isRunning():
             return
-            
-        frame_rgb = self.camera_service.get_frame()
+        self.monitoring_worker = MonitoringWorker(
+            camera_service=self.camera_service,
+            face_analyzer_factory=self.face_analyzer_factory,
+            blink_detector=self.blink_detector,
+            perclos_calculator=self.perclos_calc,
+            prolonged_detector=self.prolonged_detector,
+            yawn_detector=self.yawn_detector,
+            head_pose_estimator=self.head_pose_estimator,
+            parent=self,
+        )
+        self.monitoring_worker.sample_ready.connect(self._on_monitoring_sample)
+        self.monitoring_worker.camera_ready.connect(self._on_camera_ready)
+        self.monitoring_worker.error.connect(self._on_monitoring_error)
+        self.monitoring_worker.finished.connect(self._on_monitoring_stopped)
+        self.monitoring_worker.finished.connect(self.monitoring_worker.deleteLater)
+        self.monitoring_worker.start()
+
+    def _stop_monitoring_worker(self):
+        worker = self.monitoring_worker
+        if worker is None:
+            self.camera_service.stop()
+            return
+        try:
+            worker.sample_ready.disconnect(self._on_monitoring_sample)
+        except RuntimeError:
+            pass
+        worker.request_stop()
+        if not worker.wait(3000):
+            self.camera_service.stop()
+            if not worker.wait(1000):
+                return
+        self.monitoring_worker = None
+
+    def _on_camera_ready(self, index, width, height, fps):
+        self.lbl_video.setText("")
+        self.lbl_status.setToolTip(
+            f"Cámara {index}: {width}x{height}, {fps:.1f} FPS"
+        )
+
+    def _on_monitoring_error(self, message):
+        self.lbl_video.clear()
+        self.lbl_video.setText("Cámara no disponible")
+        self.lbl_video.setToolTip(message)
+        self.lbl_face_status.setText("Monitoreo facial no disponible")
+
+    def _on_monitoring_stopped(self):
+        worker = self.sender()
+        if worker is self.monitoring_worker and not worker.isRunning():
+            self.monitoring_worker = None
+
+    def _on_monitoring_sample(self, sample):
+        frame_rgb = sample.frame_rgb
         if frame_rgb is not None:
-            if self.face_analyzer:
-                result = self.face_analyzer.analyze_frame(frame_rgb)
-                current_time = time.time()
+            if sample.analyzed:
+                current_time = sample.current_time
                 
-                if result:
+                if sample.face_detected:
                     self.lbl_face_status.setText("Rostro detectado")
                     self.lbl_face_status.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 13px; border: none;")
-                    frame_rgb = self.face_analyzer.draw_landmarks(frame_rgb, result)
-                    eye_metrics = get_eye_state(result)
                 else:
                     self.lbl_face_status.setText("Rostro no detectado")
                     self.lbl_face_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 13px; border: none;")
-                    eye_metrics = get_eye_state(None)
+                eye_metrics = sample.eye_metrics
                     
                 self.lbl_ear.setText(f"EAR: {eye_metrics.ear_avg:.3f}" if eye_metrics.ear_avg is not None else "EAR: ---")
                 self.lbl_eye_state.setText(f"Estado: {eye_metrics.state.value}")
                 
-                blink_duration = self.blink_detector.process_state(eye_metrics.state, current_time)
-                blink_metrics = self.blink_detector.get_metrics(current_time)
+                blink_duration = sample.blink_duration
+                blink_metrics = sample.blink_metrics
                 
                 self.lbl_blinks.setText(f"Parpadeos: {blink_metrics.total_blinks}")
                 self.lbl_bpm.setText(f"BPM: {blink_metrics.blinks_per_minute:.1f}")
                 
-                # Alimentar PERCLOS y cierre prolongado con duración del intervalo
-                if self._last_frame_time > 0 and eye_metrics.state != EyeState.UNKNOWN:
-                    interval = current_time - self._last_frame_time
-                    self.perclos_calc.add_event(current_time, eye_metrics.state, interval)
-                    
-                self._last_frame_time = current_time
-                self.prolonged_detector.process_state(eye_metrics.state, current_time)
-                
-                # Actualizar labels de PERCLOS
-                perclos = self.perclos_calc.get_perclos(current_time)
+                perclos = sample.perclos
                 self.lbl_perclos_60s.setText(
                     f"PERCLOS 1min: {perclos.perclos_60s*100:.1f}%" if perclos.perclos_60s is not None else "PERCLOS 1min: ---"
                 )
@@ -838,23 +868,19 @@ class DashboardWidget(QWidget):
                 )
                 
                 # Actualizar cierres prolongados
-                closure_result = self.prolonged_detector.get_result(current_time)
+                closure_result = sample.closure_result
                 self.lbl_prolonged_count.setText(f"Cierres prolongados: {closure_result.count}")
                 self.lbl_closure_duration.setText(f"Cierre actual: {closure_result.current_duration:.1f}s")
                 
                 # MAR y bostezos
-                landmarks_for_mouth = result if result else None
-                mar_val, mouth_state = get_mouth_state(landmarks_for_mouth)
-                self.yawn_detector.process_state(mouth_state, current_time)
-                yawn_metrics = self.yawn_detector.get_metrics(current_time)
+                mar_val = sample.mar
+                mouth_state = sample.mouth_state
+                yawn_metrics = sample.yawn_metrics
                 self.lbl_mar.setText(f"MAR: {mar_val:.3f}" if mar_val is not None else "MAR: ---")
                 self.lbl_yawns.setText(f"Bostezos: {yawn_metrics.total_yawns}")
                 
                 # Postura de cabeza
-                h_frame, w_frame = frame_rgb.shape[:2]
-                head_result = self.head_pose_estimator.process(
-                    result, w_frame, h_frame, current_time
-                )
+                head_result = sample.head_result
                 if head_result.angles:
                     a = head_result.angles
                     self.lbl_pitch.setText(f"Pitch: {a.pitch:.1f}°")
@@ -900,7 +926,6 @@ class DashboardWidget(QWidget):
                     closure_result, yawn_metrics, head_result,
                 )
                     
-            from PySide6.QtGui import QImage, QPixmap
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
             qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
@@ -1015,11 +1040,10 @@ class DashboardWidget(QWidget):
     def shutdown(self):
         """Libera recursos y cierra de forma consistente una sesión activa."""
         self.timer.stop()
-        self.camera_timer.stop()
         if self.session_service and self.session_service.get_active_session():
             self._end_session(show_summary=False)
         elif self.camera_service:
-            self.camera_service.stop()
+            self._stop_monitoring_worker()
 
     @staticmethod
     def _create_chart_view():

@@ -1,42 +1,94 @@
-import cv2
-import numpy as np
+import logging
+import threading
 from typing import Optional
 
+import cv2
+import numpy as np
+
+
+logger = logging.getLogger(__name__)
+
+
 class CameraService:
-    def __init__(self, camera_index=0):
+    """Owns a single VideoCapture and selects the first usable camera."""
+
+    def __init__(self, camera_index=0, fallback_indices=(1, 2)):
         self.camera_index = camera_index
+        self.fallback_indices = tuple(fallback_indices)
+        self.selected_index: Optional[int] = None
         self.cap = None
         self._is_running = False
+        self._lock = threading.Lock()
+
+    def _candidate_indices(self):
+        return tuple(dict.fromkeys((self.camera_index, 0, *self.fallback_indices)))
 
     def start(self) -> bool:
-        if self._is_running:
-            return True
-        
-        self.cap = cv2.VideoCapture(self.camera_index)
-        if not self.cap.isOpened():
+        with self._lock:
+            if self._is_running and self.cap is not None:
+                return True
+
+            for index in self._candidate_indices():
+                logger.info("Intentando abrir cámara con índice %s", index)
+                capture = cv2.VideoCapture(index)
+                if not capture.isOpened():
+                    logger.warning("Cámara %s no disponible", index)
+                    capture.release()
+                    continue
+
+                capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                self.cap = capture
+                self.selected_index = index
+                self._is_running = True
+                width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+                height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+                fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
+                logger.info(
+                    "Cámara %s abierta: %sx%s, FPS informado %.1f",
+                    index, width, height, fps,
+                )
+                return True
+
             self.cap = None
+            self.selected_index = None
+            self._is_running = False
+            logger.error(
+                "No se encontró una cámara disponible en los índices %s",
+                self._candidate_indices(),
+            )
             return False
-            
-        self._is_running = True
-        return True
 
     def stop(self):
-        self._is_running = False
-        if self.cap:
-            self.cap.release()
+        with self._lock:
+            capture = self.cap
+            camera_index = self.selected_index
             self.cap = None
+            self.selected_index = None
+            self._is_running = False
+        if capture is not None:
+            capture.release()
+            logger.info("Cámara %s liberada", camera_index)
 
     def get_frame(self) -> Optional[np.ndarray]:
-        if not self._is_running or not self.cap:
+        capture = self.cap
+        if not self._is_running or capture is None:
             return None
-            
-        ret, frame = self.cap.read()
-        if not ret:
+
+        success, frame = capture.read()
+        if not success or frame is None:
             return None
-            
-        # OpenCV usa BGR, convertimos a RGB para interfaces gráficas
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return frame_rgb
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     def is_running(self) -> bool:
         return self._is_running
+
+    def properties(self):
+        capture = self.cap
+        if capture is None:
+            return self.selected_index, 0, 0, 0.0
+        return (
+            self.selected_index,
+            int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0),
+            int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0),
+            float(capture.get(cv2.CAP_PROP_FPS) or 0.0),
+        )

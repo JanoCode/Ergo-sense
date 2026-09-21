@@ -23,6 +23,7 @@ class TestCameraService(unittest.TestCase):
         self.assertTrue(result)
         self.assertTrue(self.service.is_running())
         mock_videocapture.assert_called_once_with(0)
+        self.assertEqual(self.service.selected_index, 0)
         
     @patch('cv2.VideoCapture')
     def test_start_fail(self, mock_videocapture):
@@ -35,6 +36,45 @@ class TestCameraService(unittest.TestCase):
         self.assertFalse(result)
         self.assertFalse(self.service.is_running())
         self.assertIsNone(self.service.cap)
+        self.assertEqual(
+            [call.args[0] for call in mock_videocapture.call_args_list],
+            [0, 1, 2],
+        )
+        self.assertEqual(mock_cap.release.call_count, 3)
+
+    @patch('cv2.VideoCapture')
+    def test_start_uses_first_available_fallback_without_duplicates(
+        self, mock_videocapture
+    ):
+        unavailable = MagicMock()
+        unavailable.isOpened.return_value = False
+        available = MagicMock()
+        available.isOpened.return_value = True
+        available.get.return_value = 0
+        mock_videocapture.side_effect = [unavailable, available]
+
+        service = CameraService(camera_index=0, fallback_indices=(0, 1, 2))
+        self.assertTrue(service.start())
+
+        self.assertEqual(service.selected_index, 1)
+        self.assertEqual(
+            [call.args[0] for call in mock_videocapture.call_args_list], [0, 1]
+        )
+        unavailable.release.assert_called_once()
+
+    @patch('cv2.VideoCapture')
+    def test_start_does_not_open_second_capture_when_running(
+        self, mock_videocapture
+    ):
+        capture = MagicMock()
+        capture.isOpened.return_value = True
+        capture.get.return_value = 0
+        mock_videocapture.return_value = capture
+
+        self.assertTrue(self.service.start())
+        self.assertTrue(self.service.start())
+
+        mock_videocapture.assert_called_once_with(0)
         
     @patch('cv2.VideoCapture')
     def test_stop(self, mock_videocapture):
