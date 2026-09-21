@@ -13,6 +13,31 @@ from fatigue.head_pose import HeadPoseEstimator, HeadPoseConfig
 
 
 class TestMARCalculator(unittest.TestCase):
+    def test_mar_is_independent_of_image_aspect_ratio(self):
+        for width, height in ((640, 480), (1280, 720), (480, 640)):
+            pts = [Point3D(0, 0, 0) for _ in range(478)]
+            for index, x, y in ((61, 100, 200), (291, 200, 200),
+                                (82, 130, 170), (87, 130, 230),
+                                (13, 150, 170), (14, 150, 230)):
+                pts[index] = Point3D(x / width, y / height, 0)
+            mar, state = get_mouth_state(
+                FaceLandmarksResult([], [], [], [], pts),
+                frame_width=width, frame_height=height,
+            )
+            self.assertAlmostEqual(mar, 0.6)
+            self.assertEqual(state, MouthState.OPEN)
+
+    def test_personal_mar_cannot_lower_general_threshold(self):
+        from fatigue.baseline import MetricBaseline
+        pts = [Point3D(0, 0, 0) for _ in range(478)]
+        pts[291] = Point3D(1, 0, 0)
+        pts[87] = pts[14] = Point3D(0, 0.6, 0)
+        landmarks = FaceLandmarksResult([], [], [], [], pts)
+        self.assertEqual(get_mouth_state(landmarks)[1], MouthState.OPEN)
+        self.assertEqual(get_mouth_state(
+            landmarks, baseline=MetricBaseline(0.45, 0.1, 100)
+        )[1], MouthState.CLOSED)
+
     def test_calculate_mar_open(self):
         # Boca muy abierta: distancia vertical grande
         # horiz = 10, vert1 = 5, vert2 = 5 → MAR = 10/(2*10) = 0.5
@@ -59,6 +84,25 @@ class TestMARCalculator(unittest.TestCase):
 
 
 class TestYawnDetector(unittest.TestCase):
+    def test_unknown_breaks_continuity(self):
+        self.det.process_state(MouthState.OPEN, 1)
+        self.det.process_state(MouthState.UNKNOWN, 2)
+        self.det.process_state(MouthState.CLOSED, 5)
+        self.assertEqual(self.det.total_yawns, 0)
+
+    def test_reopen_counts_new_event(self):
+        for timestamp in (0, 5):
+            self.det.process_state(MouthState.OPEN, timestamp)
+            self.det.process_state(MouthState.OPEN, timestamp + 2)
+            self.det.process_state(MouthState.CLOSED, timestamp + 3)
+        self.assertEqual(self.det.total_yawns, 2)
+
+    def test_speech_like_short_openings_do_not_accumulate(self):
+        for timestamp in range(20):
+            self.det.process_state(MouthState.OPEN, timestamp)
+            self.det.process_state(MouthState.CLOSED, timestamp + 0.4)
+        self.assertEqual(self.det.total_yawns, 0)
+
     def setUp(self):
         config = YawnConfig()
         config.MIN_OPEN_SECONDS = 2.0

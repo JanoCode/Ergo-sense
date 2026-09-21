@@ -74,6 +74,8 @@ class MonitoringWorker(QThread):
         self._last_metric_time = 0.0
         self._face_analyzer = None
         self._first_frame_logged = False
+        self.show_landmarks = threading.Event()
+        self.mar_baseline = None
 
     def request_stop(self):
         self._stop_event.set()
@@ -198,7 +200,11 @@ class MonitoringWorker(QThread):
         perclos = self.perclos_calculator.get_perclos(current_time)
         closure_result = self.prolonged_detector.get_result(current_time)
 
-        mar, mouth_state = get_mouth_state(result)
+        height, width = frame_rgb.shape[:2]
+        mar, mouth_state = get_mouth_state(
+            result, frame_width=width, frame_height=height,
+            baseline=self.mar_baseline,
+        )
         self.yawn_detector.process_state(mouth_state, current_time)
         yawn_metrics = self.yawn_detector.get_metrics(current_time)
 
@@ -208,7 +214,7 @@ class MonitoringWorker(QThread):
         )
         rendered_frame = (
             analyzer.draw_landmarks(frame_rgb, result)
-            if result is not None else frame_rgb
+            if result is not None and self.show_landmarks.is_set() else frame_rgb
         )
         return MonitoringSample(
             frame_rgb=rendered_frame,

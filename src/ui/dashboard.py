@@ -667,6 +667,7 @@ class DashboardWidget(QWidget):
             self._assessment_max_pitch_deviation = 0.0
             self._session_max_head_deviation = 0.0
             self.fatigue_engine.reset(current_session_start)
+            self.current_assessment = None
             self._reset_fatigue_ui()
 
             # Iniciar baseline para el usuario activo
@@ -807,6 +808,9 @@ class DashboardWidget(QWidget):
             parent=self,
         )
         self.monitoring_worker.sample_ready.connect(self._on_monitoring_sample)
+        baseline = self.baseline_service.get_baseline() if self.baseline_service else None
+        if baseline and baseline.state == BaselineState.READY:
+            self.monitoring_worker.mar_baseline = baseline.mar
         self.monitoring_worker.camera_ready.connect(self._on_camera_ready)
         self.monitoring_worker.analysis_status.connect(self._on_analysis_status)
         self.monitoring_worker.error.connect(self._on_monitoring_error)
@@ -1052,6 +1056,7 @@ class DashboardWidget(QWidget):
         )
         if assessment is None:
             return
+        self.current_assessment = assessment
 
         active_session = (
             self.session_service.get_active_session() if self.session_service else None

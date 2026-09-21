@@ -1,4 +1,5 @@
 from typing import Optional
+import math
 from fatigue.models import MouthState, YawnMetrics
 
 class YawnConfig:
@@ -27,7 +28,10 @@ class YawnDetector:
         self._session_start = session_start
 
     def process_state(self, state: MouthState, current_time: float):
-        if state == MouthState.UNKNOWN:
+        if state == MouthState.UNKNOWN or not math.isfinite(current_time):
+            self._is_open = False
+            self._open_start = None
+            self._already_counted = False
             return
 
         if state == MouthState.OPEN:
@@ -39,7 +43,7 @@ class YawnDetector:
                 # Verificar si supera el umbral por primera vez (conteo durante apertura)
                 if not self._already_counted and self._open_start is not None:
                     duration = current_time - self._open_start
-                    if duration >= self.config.MIN_OPEN_SECONDS:
+                    if self.config.MIN_OPEN_SECONDS <= duration <= self.config.MAX_YAWN_SECONDS:
                         self.total_yawns += 1
                         self._already_counted = True
         else:  # CLOSED

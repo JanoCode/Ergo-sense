@@ -19,6 +19,23 @@ from monitoring.monitoring_worker import MonitoringWorker
 
 
 class TestMonitoringWorker(unittest.TestCase):
+    def test_overlay_is_optional_and_analysis_still_runs(self):
+        from monitoring.models import FaceLandmarksResult, Point3D
+        analyzer = MagicMock()
+        analyzer.analyze_frame.return_value = FaceLandmarksResult(
+            [], [], [], [], [Point3D(0, 0, 0) for _ in range(478)]
+        )
+        worker = self._worker(MagicMock(), lambda: analyzer)
+        worker.head_pose_estimator = MagicMock()
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        sample = worker._analyze(frame, 1, analyzer)
+        self.assertIs(sample.frame_rgb, frame)
+        analyzer.draw_landmarks.assert_not_called()
+        worker.show_landmarks.set()
+        worker._analyze(frame, 2, analyzer)
+        analyzer.draw_landmarks.assert_called_once()
+        self.assertEqual(analyzer.analyze_frame.call_count, 2)
+
     def _worker(self, camera, analyzer_factory):
         return MonitoringWorker(
             camera_service=camera,

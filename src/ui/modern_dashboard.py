@@ -2,6 +2,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
     QFrame,
+    QCheckBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -235,6 +236,19 @@ class ModernDashboardWidget(DashboardWidget):
         ):
             score_layout.addWidget(widget)
         score_layout.addStretch()
+        self.lbl_current_state = QLabel("Estado actual · esperando evaluación")
+        self.lbl_current_state.setWordWrap(True)
+        self.lbl_current_state.setObjectName("sectionTitle")
+        self.monitor_score_bar = QProgressBar()
+        self.monitor_score_bar.setRange(0, 100)
+        self.monitor_score_bar.setTextVisible(False)
+        self.lbl_recommendation = QLabel("La primera evaluación necesita una ventana de observación.")
+        self.lbl_recommendation.setWordWrap(True)
+        self.lbl_reasons = QLabel("¿Qué está detectando?\nEsperando datos suficientes.")
+        self.lbl_reasons.setWordWrap(True)
+        for widget in (self.lbl_current_state, self.monitor_score_bar,
+                       self.lbl_recommendation, self.lbl_reasons):
+            score_layout.addWidget(widget)
         upper.addWidget(score_card, 1)
         self.monitor_upper_layout = upper
         monitor_layout.addLayout(upper, 1)
@@ -255,6 +269,19 @@ class ModernDashboardWidget(DashboardWidget):
             summary.addWidget(widget, 0, column)
             summary.setColumnStretch(column, 1)
         monitor_layout.addLayout(summary)
+        self.lbl_metric_context = QLabel("Esperando detección facial")
+        self.lbl_metric_context.setWordWrap(True)
+        monitor_layout.addWidget(self.lbl_metric_context)
+        self.landmarks_toggle = QCheckBox("Mostrar puntos de detección")
+        self.landmarks_toggle.toggled.connect(self._set_landmarks_visible)
+        monitor_layout.addWidget(self.landmarks_toggle)
+        self.lbl_yawn_feedback = QLabel("")
+        monitor_layout.addWidget(self.lbl_yawn_feedback)
+        from PySide6.QtCore import QTimer
+        self.yawn_feedback_timer = QTimer(self)
+        self.yawn_feedback_timer.setSingleShot(True)
+        self.yawn_feedback_timer.timeout.connect(self.lbl_yawn_feedback.clear)
+        self._displayed_yawns = 0
 
         self.advanced_toggle = QToolButton()
         self.advanced_toggle.setText("Ver métricas avanzadas")
@@ -411,6 +438,13 @@ class ModernDashboardWidget(DashboardWidget):
         )
 
     def _start_session(self):
+        self._displayed_yawns = 0
+        self.lbl_yawn_feedback.clear()
+        self.yawn_feedback_timer.stop()
+        self.lbl_current_state.setText("Estado actual · esperando evaluación")
+        self.lbl_recommendation.setText("La primera evaluación necesita una ventana de observación.")
+        self.lbl_reasons.setText("¿Qué está detectando?\nEsperando datos suficientes.")
+        self.monitor_score_bar.setValue(0)
         super()._start_session()
         if self.session_service and self.session_service.get_active_session():
             self.metrics_container.setVisible(self.advanced_toggle.isChecked())
@@ -514,6 +548,42 @@ class ModernDashboardWidget(DashboardWidget):
     def _update_fatigue_assessment(self, *args, **kwargs):
         super()._update_fatigue_assessment(*args, **kwargs)
         self._sync_score()
+        assessment = getattr(self, "current_assessment", None)
+        if assessment is not None:
+            from ui.fatigue_feedback import level_feedback, readable_reasons
+            title, recommendation, color = level_feedback(assessment.level)
+            self.lbl_current_state.setText("Estado actual\n" + title)
+            self.lbl_recommendation.setText(recommendation)
+            self.monitor_score_bar.setValue(round(assessment.score))
+            self.monitor_score_bar.setStyleSheet(
+                f"QProgressBar::chunk {{ background: {color}; }}"
+            )
+            self.lbl_reasons.setText("¿Qué está detectando?\n" + readable_reasons(assessment.reasons))
+
+    def _start_monitoring_worker(self):
+        super()._start_monitoring_worker()
+        self._set_landmarks_visible(self.landmarks_toggle.isChecked())
+
+    def _set_landmarks_visible(self, enabled):
+        worker = self.monitoring_worker
+        if worker is not None:
+            worker.show_landmarks.set() if enabled else worker.show_landmarks.clear()
+
+    def _on_monitoring_sample(self, sample):
+        super()._on_monitoring_sample(sample)
+        if not sample.analyzed:
+            return
+        count = sample.yawn_metrics.total_yawns
+        if count > self._displayed_yawns:
+            self.lbl_yawn_feedback.setText("Bostezo detectado")
+            self.yawn_feedback_timer.start(3500)
+        self._displayed_yawns = count
+        if not sample.face_detected:
+            self.lbl_metric_context.setText("Sin detección facial: interpretación no disponible.")
+            return
+        from ui.fatigue_feedback import metric_context
+        baseline = self.baseline_service.get_baseline() if self.baseline_service else None
+        self.lbl_metric_context.setText(metric_context(sample, baseline, self.fatigue_engine.config))
 
     def _sync_score(self):
         text = self.lbl_fatigue_score.text()
