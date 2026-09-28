@@ -45,15 +45,6 @@ class TestModernDashboard(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(self.dashboard.pages.count(), 5)
 
-    def test_fatigue_score_is_not_a_primary_element(self):
-        self.dashboard.lbl_fatigue_score.setText("Fatigue Score: 32/100")
-        self.dashboard.lbl_fatigue_level.setText("Nivel: MILD")
-        self.dashboard._sync_score()
-
-        self.assertTrue(self.dashboard.lbl_home_score.isHidden())
-        self.assertTrue(self.dashboard.home_score_bar.isHidden())
-        self.assertEqual(self.dashboard.lbl_home_level.text(), "Sin sesión activa")
-
     def test_navigation_uses_wellbeing_language(self):
         self.assertEqual(
             [button.text() for button in self.dashboard.nav_buttons],
@@ -147,33 +138,14 @@ class TestModernDashboard(unittest.TestCase):
         for term in forbidden:
             self.assertNotIn(term, visible_text)
 
-    def test_monitoring_controls_have_clear_labels(self):
-        self.assertEqual(
-            self.dashboard.advanced_toggle.text(), "Ver métricas avanzadas"
-        )
-        self.assertEqual(
-            self.dashboard.lbl_head_dev.text(), "Esperando detección facial"
-        )
-        self.dashboard.advanced_toggle.setChecked(True)
-        self.assertEqual(
-            self.dashboard.advanced_toggle.text(), "Ocultar métricas avanzadas"
-        )
-
     def test_empty_and_populated_charts_keep_dark_palette(self):
         from datetime import datetime
         from ui.theme import SURFACE
-        chart = self.dashboard.chart_score
+        chart = self.dashboard.chart_daily_usage
         self.assertEqual(chart.chart().backgroundBrush().color().name(), SURFACE)
         for points in ([], [(datetime.now(), 32)]):
-            self.dashboard._set_line_chart(chart, "Score", points, "Score")
+            self.dashboard._set_line_chart(chart, "Tiempo de uso", points, "Horas")
             self.assertEqual(chart.chart().backgroundBrush().color().name(), SURFACE)
-
-    def test_metric_card_preserves_value_and_interpretation(self):
-        card = self.dashboard.lbl_bpm
-        card.setText("Parpadeos: 13.6/min")
-        card.setInterpretation("Dentro de tu rango habitual")
-        self.assertEqual(card.text(), "13.6/min")
-        self.assertEqual(card._interpretation.text(), "Dentro de tu rango habitual")
 
 
 if __name__ == "__main__":

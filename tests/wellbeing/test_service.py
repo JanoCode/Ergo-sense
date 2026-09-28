@@ -74,8 +74,7 @@ def test_time_until_next_break(wellbeing_service, mock_session_service):
         time_until = wellbeing_service.get_time_until_next_break()
         assert time_until == 40 * 60 # 40 minutes remaining
 
-def test_service_works_without_advanced_fatigue(wellbeing_service, mock_session_service):
-    # Just to prove it doesn't need FatigueEngine
+def test_service_works_without_external_sensors(wellbeing_service, mock_session_service):
     start_time = datetime(2026, 9, 28, 10, 0, 0)
     mock_session = Session(id=1, user_id=1, started_at=start_time)
     mock_session_service.get_active_session.return_value = mock_session

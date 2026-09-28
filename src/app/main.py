@@ -12,15 +12,6 @@ from users.repository import SQLiteUserRepository
 from users.service import UserService
 from sessions.repository import SQLiteSessionRepository
 from sessions.service import SessionService
-from monitoring.camera import CameraService
-from monitoring.face_landmarks import FaceAnalyzer
-from fatigue.repository import SQLiteBaselineRepository
-from fatigue.service import BaselineService
-from fatigue.history_repository import SQLiteFatigueHistoryRepository
-from fatigue.history_service import FatigueHistoryService
-from fatigue.analytics import (
-    FatigueAnalyticsService, SQLiteFatigueAnalyticsRepository,
-)
 from wellbeing.service import WellbeingService
 from wellbeing.repository import SQLiteBreakEventRepository
 from wellbeing.recommendations import WellbeingRecommendationService
@@ -42,16 +33,6 @@ def main():
     session_repo = SQLiteSessionRepository(db_manager)
     session_service = SessionService(session_repo, user_service)
     
-    camera_service = CameraService()
-    face_analyzer = FaceAnalyzer
-    baseline_repo = SQLiteBaselineRepository(db_manager)
-    baseline_service = BaselineService(baseline_repo)
-    fatigue_history_service = FatigueHistoryService(
-        SQLiteFatigueHistoryRepository(db_manager)
-    )
-    fatigue_analytics_service = FatigueAnalyticsService(
-        SQLiteFatigueAnalyticsRepository(db_manager)
-    )
     break_event_repo = SQLiteBreakEventRepository(db_manager)
     wellbeing_service = WellbeingService(session_service, break_event_repo)
     recommendation_service = WellbeingRecommendationService()
@@ -65,11 +46,8 @@ def main():
     app.setApplicationName("ErgoSense")
     
     window = MainWindow(
-        user_service, session_service, camera_service, face_analyzer,
-        baseline_service, fatigue_history_service, fatigue_analytics_service,
-        wellbeing_service,
-        recommendation_service,
-        wellbeing_analytics_service,
+        user_service, session_service, wellbeing_service,
+        recommendation_service, wellbeing_analytics_service,
     )
     app.aboutToQuit.connect(window.dashboard.shutdown)
     window.show()

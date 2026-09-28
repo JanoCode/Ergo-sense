@@ -1,85 +1,54 @@
 # ErgoSense
 
-Aplicación de escritorio para monitorear señales asociadas a fatiga durante sesiones
-de trabajo y analizar su evolución histórica por usuario. Es una herramienta de apoyo
-ergonómico: **no realiza diagnósticos médicos**.
+Aplicación de escritorio para organizar sesiones de trabajo y hábitos de descanso.
+ErgoSense registra el tiempo de uso continuo, recuerda cuándo realizar una pausa,
+permite posponerla y conserva un historial simple por usuario.
 
-## Descripción
+## Funcionalidades
 
-MediaPipe se utiliza exclusivamente para extraer landmarks faciales. A partir de ellos,
-ErgoSense calcula EAR, parpadeos, PERCLOS, MAR y pose de cabeza. La clasificación de
-fatiga no usa Machine Learning: combina métricas mediante reglas deterministas,
-configurables y explicables, adaptadas cuando existe un baseline personal válido.
+- Usuarios y sesiones independientes.
+- Recordatorios de pausa basados exclusivamente en tiempo.
+- Posposición configurable sin reiniciar el uso continuo.
+- Temporizador y finalización manual o automática de pausas.
+- Recomendaciones breves de autocuidado durante los descansos.
+- Historial de sesiones, pausas y estadísticas de 7 y 30 días.
+- Gráficos de tiempo de uso y pausas por día.
 
 ## Arquitectura
 
-El proyecto utiliza **Modular Monolith Architecture**: una sola aplicación de escritorio,
-un único proceso y una base de datos SQLite compartida. El código se agrupa por
-funcionalidad en lugar de dividirse en capas globales.
+El proyecto utiliza una arquitectura de monolito modular y una base SQLite compartida:
 
-- `src/users/`: usuarios, selección, persistencia y diálogo de creación.
-- `src/sessions/`: inicio, finalización e historial de sesiones.
-- `src/monitoring/`: webcam, selección de dispositivo y worker `QThread` para
-  captura, landmarks y métricas sin bloquear la interfaz.
-- `src/fatigue/`: métricas, baseline, motor de score, persistencia y analytics.
-- `src/database/`: conexión y creación del esquema SQLite compartido.
-- `src/ui/`: ventana principal, monitoreo, historial, gráficos e insights.
-- `src/app/`: composición de módulos y punto de entrada.
-- `tests/`: pruebas organizadas según los mismos módulos funcionales.
+- `src/users/`: perfiles y selección de usuario.
+- `src/sessions/`: inicio, finalización y persistencia de sesiones.
+- `src/wellbeing/`: ciclo de trabajo, pausas, recomendaciones y estadísticas.
+- `src/database/`: conexión y esquema SQLite.
+- `src/ui/`: interfaz de escritorio y gráficos.
+- `src/app/`: configuración y composición de dependencias.
+- `tests/`: pruebas organizadas por módulo funcional.
 
-Toda la solución se ejecuta como un único proceso y comparte una sola base SQLite.
+Las tablas históricas de versiones anteriores se conservan por compatibilidad, pero
+no forman parte del flujo activo ni se eliminan durante la inicialización.
 
 ## Tecnologías
 
 - Python 3.10 o superior.
-- PySide6 y Qt Charts para la interfaz y visualizaciones.
-- OpenCV para captura y tratamiento de frames.
-- MediaPipe para landmarks faciales.
-- SQLite para usuarios, sesiones, assessments, eventos y resúmenes.
-- Pytest para ejecutar las pruebas automatizadas.
+- PySide6 y Qt Charts.
+- SQLite.
+- Pytest.
 
 ## Instalación
 
-1. Crea un entorno virtual:
-   ```bash
-   python -m venv .venv
-   # En Windows:
-   .venv\Scripts\activate
-   # En Linux/Mac:
-   source .venv/bin/activate
-   ```
-2. Instala las dependencias:
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
-
-El extractor utiliza la API moderna `mediapipe.tasks.vision.FaceLandmarker` y el
-modelo portable incluido en `assets/models/face_landmarker.task`. La webcam debe
-estar disponible para el monitoreo en tiempo real; si no existe una cámara, la
-aplicación sigue abierta y permite consultar el historial y las vistas analíticas.
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
 
 ## Ejecución
 
-Para iniciar la aplicación, ejecuta:
 ```bash
 python -m src.app.main
 ```
-
-## Funcionamiento general
-
-1. Crea o selecciona un usuario.
-2. Inicia una sesión; si hace falta, el baseline personal comienza a calibrarse.
-3. La webcam alimenta landmarks y métricas deterministas, sin clasificar imágenes.
-4. Cada 30 segundos el motor genera un Fatigue Score de 0 a 100, nivel, confianza y
-   razones explicativas.
-5. Las evaluaciones y eventos relevantes se guardan en SQLite.
-6. Al finalizar se genera un resumen con métricas, scores y tiempos hasta niveles.
-7. El historial, los gráficos y el análisis de 7/30/90 días utilizan únicamente esos
-   datos reales persistidos.
-
-Los valores ausentes (`None`, `UNKNOWN`, rostro no detectado o muestras inválidas) se
-tratan como información no disponible; nunca se convierten automáticamente en un
-estado normal ni en cero.
 
 ## Tests
 

@@ -36,7 +36,7 @@ QLabel#heroScore, QLabel#monitorScore { color: #86b8ff; font-size: 46px; font-we
 QLabel#metricValue { color: #e7f0fc; font-size: 24px; font-weight: 600; }
 QLabel#sessionTime { font-size: 22px; color: #bdcee4; }
 QLabel#videoSurface { background: #080f19; color: #a6bad5; border: 1px solid #354d6a; border-radius: 12px; }
-QLabel#cameraStatus, QLabel#statusText, QLabel#stateBadge { background: #24364d; color: #c5d6eb; border: 1px solid #405875; border-radius: 8px; padding: 7px 12px; }
+QLabel#statusText, QLabel#stateBadge { background: #24364d; color: #c5d6eb; border: 1px solid #405875; border-radius: 8px; padding: 7px 12px; }
 QLabel#plainMetric { background: #152235; color: #c6d7ec; padding: 10px; border-radius: 7px; }
 QProgressBar { background: #0e1928; border: 1px solid #30455f; border-radius: 7px; min-height: 14px; max-height: 14px; }
 QProgressBar::chunk { background: #619aff; border-radius: 6px; }

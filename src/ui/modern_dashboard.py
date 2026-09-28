@@ -3,33 +3,18 @@ from datetime import datetime
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
-    QFrame,
-    QCheckBox,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QProgressBar,
-    QScrollArea,
-    QSizePolicy,
-    QStackedWidget,
-    QToolButton,
-    QVBoxLayout,
-    QWidget,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
+    QSizePolicy, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from ui.dashboard import DashboardWidget
 
 
 class ModernDashboardWidget(DashboardWidget):
-    """Presentation-only redesign built on the existing dashboard behavior."""
-
     PAGE_HOME = 0
     PAGE_WELLBEING = 1
-    PAGE_MONITORING = PAGE_WELLBEING
     PAGE_HISTORY = 2
     PAGE_SETTINGS = 3
-    PAGE_TRENDS = PAGE_SETTINGS
     PAGE_USERS = 4
 
     def _setup_ui(self):
@@ -37,16 +22,13 @@ class ModernDashboardWidget(DashboardWidget):
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-
         root.addWidget(self._build_navigation())
         self.pages = QStackedWidget()
-        self.pages.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root.addWidget(self.pages, 1)
-
         self.pages.addWidget(self._scroll_page(self._build_home()))
-        self.pages.addWidget(self._scroll_page(self._build_monitoring()))
+        self.pages.addWidget(self._scroll_page(self._build_wellbeing()))
         self.pages.addWidget(self._scroll_page(self._build_history()))
-        self.pages.addWidget(self._scroll_page(self._build_trends()))
+        self.pages.addWidget(self._scroll_page(self._build_settings()))
         self.pages.addWidget(self._scroll_page(self._build_users()))
         self._navigate(self.PAGE_HOME)
 
@@ -57,8 +39,6 @@ class ModernDashboardWidget(DashboardWidget):
         sidebar.setMaximumWidth(230)
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(18, 24, 18, 18)
-        layout.setSpacing(8)
-
         brand = QLabel("ErgoSense")
         brand.setObjectName("brand")
         tagline = QLabel("Bienestar durante tu jornada")
@@ -67,12 +47,11 @@ class ModernDashboardWidget(DashboardWidget):
         layout.addWidget(brand)
         layout.addWidget(tagline)
         layout.addSpacing(24)
-
         self.nav_buttons = []
-        for index, label in enumerate(
+        for index, text in enumerate(
             ("Inicio", "Bienestar", "Historial", "Configuración", "Usuarios")
         ):
-            button = QPushButton(label)
+            button = QPushButton(text)
             button.setObjectName("navButton")
             button.setCheckable(True)
             button.setMinimumHeight(42)
@@ -80,7 +59,6 @@ class ModernDashboardWidget(DashboardWidget):
             self.nav_buttons.append(button)
             layout.addWidget(button)
         layout.addStretch()
-
         self.lbl_active_user = QLabel("No hay usuario activo")
         self.lbl_active_user.setObjectName("sidebarUser")
         self.lbl_active_user.setWordWrap(True)
@@ -89,10 +67,9 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _build_home(self):
         page, layout = self._page("Inicio", "Tu estado de un vistazo")
-
         self.home_empty = self._empty_state(
             "Selecciona o crea un usuario para comenzar.",
-            "Tus sesiones y resultados se guardarán de forma independiente.",
+            "Tus sesiones y pausas se guardarán en su perfil.",
         )
         go_users = QPushButton("Ir a usuarios")
         go_users.setObjectName("primaryButton")
@@ -104,560 +81,233 @@ class ModernDashboardWidget(DashboardWidget):
         content = QVBoxLayout(self.home_content)
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(16)
-
-        welcome = self._card()
-        self.home_welcome_card = welcome
-        welcome_layout = QVBoxLayout(welcome)
+        cards = QGridLayout()
+        self.home_cards_layout = cards
+        self.home_welcome_card = self._card()
+        welcome = QVBoxLayout(self.home_welcome_card)
         self.lbl_home_user = QLabel("Hola")
         self.lbl_home_user.setObjectName("sectionTitle")
         self.lbl_status = QLabel("Sin sesión")
         self.lbl_status.setObjectName("statusText")
-        self.lbl_baseline_status = QLabel("")
-        self.lbl_baseline_status.setObjectName("mutedText")
         self.lbl_session_count = QLabel("Sesiones registradas: 0")
         self.lbl_session_count.setObjectName("mutedText")
-        welcome_layout.addWidget(self.lbl_home_user)
-        welcome_layout.addWidget(self.lbl_status)
-        welcome_layout.addWidget(self.lbl_baseline_status)
-        welcome_layout.addWidget(self.lbl_session_count)
-
-        fatigue = self._card()
-        self.home_fatigue_card = fatigue
-        fatigue_layout = QVBoxLayout(fatigue)
-        fatigue_title = QLabel("Estado de descanso")
-        fatigue_title.setObjectName("eyebrow")
-        self.lbl_home_score = QLabel("---")
-        self.lbl_home_score.setObjectName("heroScore")
-        self.home_score_bar = QProgressBar()
-        self.home_score_bar.setRange(0, 100)
-        self.home_score_bar.setValue(0)
-        self.home_score_bar.setTextVisible(False)
-        self.lbl_home_level = QLabel("En buen ritmo")
+        welcome.addWidget(self.lbl_home_user)
+        welcome.addWidget(self.lbl_status)
+        welcome.addWidget(self.lbl_session_count)
+        self.home_state_card = self._card()
+        state_layout = QVBoxLayout(self.home_state_card)
+        state_title = QLabel("Estado de descanso")
+        state_title.setObjectName("eyebrow")
+        self.lbl_home_level = QLabel("Sin sesión activa")
         self.lbl_home_level.setObjectName("sectionTitle")
-        fatigue_layout.addWidget(fatigue_title)
-        fatigue_layout.addWidget(self.lbl_home_level)
-        self.lbl_home_score.setVisible(False)
-        self.home_score_bar.setVisible(False)
-
-        cards = QGridLayout()
-        self.home_cards_layout = cards
-        cards.setSpacing(16)
-        cards.addWidget(welcome, 0, 0)
-        cards.addWidget(fatigue, 0, 1)
+        state_layout.addWidget(state_title)
+        state_layout.addWidget(self.lbl_home_level)
+        cards.addWidget(self.home_welcome_card, 0, 0)
+        cards.addWidget(self.home_state_card, 0, 1)
         cards.setColumnStretch(0, 1)
         cards.setColumnStretch(1, 1)
         content.addLayout(cards)
-
-        self.lbl_elapsed = QLabel("Sesión: 00:00:00")
-        self.lbl_elapsed.setObjectName("sessionTime")
-        self.lbl_elapsed.setAlignment(Qt.AlignCenter)
+        self.lbl_elapsed = self._centered("Tiempo de sesión: 00:00:00")
+        self.lbl_continuous_usage = self._centered("Uso continuo: 00:00:00")
+        self.lbl_break_info = self._centered("Próxima pausa en: -- min")
         content.addWidget(self.lbl_elapsed)
-        
-        self.lbl_continuous_usage = QLabel("Uso continuo: 00:00:00")
-        self.lbl_continuous_usage.setObjectName("sessionTime")
-        self.lbl_continuous_usage.setAlignment(Qt.AlignCenter)
-        self.lbl_continuous_usage.setVisible(False)
         content.addWidget(self.lbl_continuous_usage)
-        
-        self.lbl_break_info = QLabel("Próxima pausa recomendada en: -- min")
-        self.lbl_break_info.setObjectName("sessionTime")
-        self.lbl_break_info.setStyleSheet("color: #e67e22; font-weight: bold;")
-        self.lbl_break_info.setAlignment(Qt.AlignCenter)
-        self.lbl_break_info.setVisible(False)
         content.addWidget(self.lbl_break_info)
-
-        # Break reminder card
-        self.break_reminder_card = self._card()
-        self.break_reminder_card.setStyleSheet(
-            "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            "stop:0 #fff3e0, stop:1 #ffe0b2); border: 2px solid #e67e22;"
-            "border-radius: 12px; }"
-        )
-        reminder_layout = QVBoxLayout(self.break_reminder_card)
-        reminder_layout.setSpacing(8)
-        self.lbl_reminder_title = QLabel("Hora de hacer una pausa")
-        self.lbl_reminder_title.setStyleSheet(
-            "font-size: 18px; font-weight: bold; color: #e65100; border: none; background: transparent;"
-        )
-        self.lbl_reminder_title.setAlignment(Qt.AlignCenter)
-        self.lbl_reminder_body = QLabel("Llevas 50 minutos de uso continuo.")
-        self.lbl_reminder_body.setStyleSheet(
-            "font-size: 14px; color: #bf360c; border: none; background: transparent;"
-        )
-        self.lbl_reminder_body.setAlignment(Qt.AlignCenter)
-        self.lbl_reminder_tip = QLabel("")
-        self.lbl_reminder_tip.setWordWrap(True)
-        self.lbl_reminder_tip.setAlignment(Qt.AlignCenter)
-        self.lbl_reminder_tip.setStyleSheet(
-            "font-size: 13px; color: #7a3e00; border: none; "
-            "background: transparent;"
-        )
-        reminder_layout.addWidget(self.lbl_reminder_title)
-        reminder_layout.addWidget(self.lbl_reminder_body)
-        reminder_layout.addWidget(self.lbl_reminder_tip)
-
-        reminder_actions = QHBoxLayout()
-        reminder_actions.addStretch()
-        self.btn_start_break = QPushButton("Iniciar pausa")
-        self.btn_start_break.setObjectName("primaryButton")
-        self.btn_start_break.setMinimumHeight(40)
-        self.btn_start_break.clicked.connect(self._on_start_break)
-        self.btn_postpone = QPushButton("Recordarme después")
-        self.btn_postpone.setObjectName("secondaryButton")
-        self.btn_postpone.setMinimumHeight(40)
-        self.btn_postpone.clicked.connect(self._on_postpone)
-        reminder_actions.addWidget(self.btn_start_break)
-        reminder_actions.addWidget(self.btn_postpone)
-        reminder_actions.addStretch()
-        reminder_layout.addLayout(reminder_actions)
-        self.break_reminder_card.setVisible(False)
-        content.addWidget(self.break_reminder_card)
-
-        # Breaking state card
-        self.breaking_card = self._card()
-        self.breaking_card.setStyleSheet(
-            "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            "stop:0 #e8f5e9, stop:1 #c8e6c9); border: 2px solid #43a047;"
-            "border-radius: 12px; }"
-        )
-        breaking_layout = QVBoxLayout(self.breaking_card)
-        self.lbl_breaking_title = QLabel("Pausa en curso")
-        self.lbl_breaking_title.setStyleSheet(
-            "font-size: 18px; font-weight: bold; color: #2e7d32; border: none; background: transparent;"
-        )
-        self.lbl_breaking_title.setAlignment(Qt.AlignCenter)
-        self.lbl_breaking_since = QLabel("Desde: --:--:--")
-        self.lbl_breaking_since.setStyleSheet(
-            "font-size: 14px; color: #388e3c; border: none; background: transparent;"
-        )
-        self.lbl_breaking_since.setAlignment(Qt.AlignCenter)
-        self.lbl_break_timer = QLabel("05:00 restantes · 00:00 transcurridos")
-        self.lbl_break_timer.setStyleSheet(
-            "font-size: 16px; font-weight: bold; color: #2e7d32; "
-            "border: none; background: transparent;"
-        )
-        self.lbl_break_timer.setAlignment(Qt.AlignCenter)
-        self.btn_finish_break = QPushButton("Finalizar pausa")
-        self.btn_finish_break.setObjectName("secondaryButton")
-        self.btn_finish_break.setMinimumHeight(40)
-        self.btn_finish_break.clicked.connect(self._on_finish_break)
-        self.lbl_break_suggestions_title = QLabel("Sugerencias para esta pausa")
-        self.lbl_break_suggestions_title.setStyleSheet(
-            "font-size: 14px; font-weight: bold; color: #2e7d32; "
-            "border: none; background: transparent;"
-        )
-        self.lbl_break_suggestions_title.setAlignment(Qt.AlignCenter)
-        self.lbl_break_suggestions = QLabel("")
-        self.lbl_break_suggestions.setWordWrap(True)
-        self.lbl_break_suggestions.setAlignment(Qt.AlignCenter)
-        self.lbl_break_suggestions.setStyleSheet(
-            "font-size: 13px; color: #326b36; border: none; "
-            "background: transparent;"
-        )
-        breaking_layout.addWidget(self.lbl_breaking_title)
-        breaking_layout.addWidget(self.lbl_breaking_since)
-        breaking_layout.addWidget(self.lbl_break_timer)
-        breaking_layout.addWidget(self.lbl_break_suggestions_title)
-        breaking_layout.addWidget(self.lbl_break_suggestions)
-        breaking_layout.addWidget(self.btn_finish_break, alignment=Qt.AlignCenter)
-        self.breaking_card.setVisible(False)
-        content.addWidget(self.breaking_card)
-
-        self.lbl_break_completed = QLabel("Pausa completada")
-        self.lbl_break_completed.setAlignment(Qt.AlignCenter)
-        self.lbl_break_completed.setStyleSheet(
-            "font-size: 16px; font-weight: bold; color: #2e7d32;"
-        )
-        self.lbl_break_completed.setVisible(False)
-        content.addWidget(self.lbl_break_completed)
-
+        self._build_break_cards(content)
         actions = QHBoxLayout()
         actions.addStretch()
-        self.btn_start_session = QPushButton("Iniciar monitoreo")
+        self.btn_start_session = QPushButton("Iniciar sesión")
         self.btn_start_session.setObjectName("primaryButton")
-        self.btn_start_session.setMinimumHeight(48)
         self.btn_start_session.clicked.connect(self._start_session)
-        self.btn_end_session = QPushButton("Finalizar monitoreo")
+        self.btn_end_session = QPushButton("Finalizar sesión")
         self.btn_end_session.setObjectName("dangerButton")
-        self.btn_end_session.setMinimumHeight(48)
-        self.btn_end_session.clicked.connect(lambda: self._end_session())
+        self.btn_end_session.clicked.connect(self._end_session)
         actions.addWidget(self.btn_start_session)
         actions.addWidget(self.btn_end_session)
         actions.addStretch()
         content.addLayout(actions)
         layout.addWidget(self.home_content)
-        layout.addStretch()
         return page
 
-    def _build_monitoring(self):
+    def _build_break_cards(self, content):
+        self.break_reminder_card = self._card()
+        reminder = QVBoxLayout(self.break_reminder_card)
+        self.lbl_reminder_title = QLabel("Es un buen momento para hacer una pausa")
+        self.lbl_reminder_title.setObjectName("sectionTitle")
+        self.lbl_reminder_body = QLabel("")
+        self.lbl_reminder_tip = QLabel("")
+        for label in (self.lbl_reminder_title, self.lbl_reminder_body,
+                      self.lbl_reminder_tip):
+            label.setAlignment(Qt.AlignCenter)
+            label.setWordWrap(True)
+            reminder.addWidget(label)
+        row = QHBoxLayout()
+        row.addStretch()
+        self.btn_start_break = QPushButton("Iniciar pausa")
+        self.btn_start_break.setObjectName("primaryButton")
+        self.btn_start_break.clicked.connect(self._on_start_break)
+        self.btn_postpone = QPushButton("Recordarme después")
+        self.btn_postpone.setObjectName("secondaryButton")
+        self.btn_postpone.clicked.connect(self._on_postpone)
+        row.addWidget(self.btn_start_break)
+        row.addWidget(self.btn_postpone)
+        row.addStretch()
+        reminder.addLayout(row)
+        self.break_reminder_card.hide()
+        content.addWidget(self.break_reminder_card)
+
+        self.breaking_card = self._card()
+        breaking = QVBoxLayout(self.breaking_card)
+        self.lbl_breaking_title = QLabel("Pausa en curso")
+        self.lbl_breaking_title.setObjectName("sectionTitle")
+        self.lbl_breaking_since = QLabel("")
+        self.lbl_break_timer = QLabel("")
+        self.lbl_break_timer.setObjectName("sessionTime")
+        self.lbl_break_suggestions_title = QLabel("Sugerencias para esta pausa")
+        self.lbl_break_suggestions_title.setObjectName("eyebrow")
+        self.lbl_break_suggestions = QLabel("")
+        for label in (
+            self.lbl_breaking_title, self.lbl_breaking_since,
+            self.lbl_break_timer, self.lbl_break_suggestions_title,
+            self.lbl_break_suggestions,
+        ):
+            label.setAlignment(Qt.AlignCenter)
+            label.setWordWrap(True)
+            breaking.addWidget(label)
+        self.btn_finish_break = QPushButton("Finalizar pausa")
+        self.btn_finish_break.setObjectName("secondaryButton")
+        self.btn_finish_break.clicked.connect(self._on_finish_break)
+        breaking.addWidget(self.btn_finish_break, alignment=Qt.AlignCenter)
+        self.breaking_card.hide()
+        content.addWidget(self.breaking_card)
+        self.lbl_break_completed = self._centered("Pausa completada")
+        self.lbl_break_completed.hide()
+        content.addWidget(self.lbl_break_completed)
+
+    def _build_wellbeing(self):
         page, layout = self._page(
             "Bienestar", "Tu ciclo de trabajo y pausas durante la sesión"
         )
-        self.monitoring_empty = self._empty_state(
+        self.wellbeing_empty = self._empty_state(
             "Inicia una sesión para comenzar a registrar tu tiempo de uso.",
             "Desde Inicio puedes comenzar cuando estés listo.",
         )
-        go_home = QPushButton("Volver a Inicio")
-        go_home.setObjectName("secondaryButton")
-        go_home.clicked.connect(lambda: self._navigate(self.PAGE_HOME))
-        self.monitoring_empty.layout().addWidget(go_home, alignment=Qt.AlignCenter)
-        layout.addWidget(self.monitoring_empty)
-
-        self.monitoring_content = QWidget()
-        monitor_layout = QVBoxLayout(self.monitoring_content)
-        monitor_layout.setContentsMargins(0, 0, 0, 0)
-        monitor_layout.setSpacing(16)
-        upper = QHBoxLayout()
-        upper.setSpacing(16)
-
-        video_card = self._card()
-        self.monitor_video_card = video_card
-        video_layout = QVBoxLayout(video_card)
-        self.lbl_video = QLabel("Cámara inactiva")
-        self.lbl_video.setObjectName("videoSurface")
-        self.lbl_video.setAlignment(Qt.AlignCenter)
-        self.lbl_video.setMinimumSize(320, 240)
-        self.lbl_video.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.lbl_camera_status = QLabel("Iniciando cámara...")
-        self.lbl_camera_status.setObjectName("cameraStatus")
-        self.lbl_camera_status.setAlignment(Qt.AlignCenter)
-        self.lbl_face_status = QLabel("Rostro no detectado")
-        self.lbl_face_status.setObjectName("stateBadge")
-        self.lbl_face_status.setAlignment(Qt.AlignCenter)
-        self.btn_retry_camera = QPushButton("Reintentar cámara")
-        self.btn_retry_camera.setObjectName("secondaryButton")
-        self.btn_retry_camera.clicked.connect(self._retry_monitoring)
-        self.btn_retry_camera.setVisible(False)
-        video_layout.addWidget(self.lbl_video, 1)
-        video_layout.addWidget(self.lbl_camera_status)
-        video_layout.addWidget(self.lbl_face_status)
-        video_layout.addWidget(self.btn_retry_camera, alignment=Qt.AlignCenter)
-        upper.addWidget(video_card, 3)
-
-        score_card = self._card()
-        self.monitor_score_card = score_card
-        score_layout = QVBoxLayout(score_card)
-        score_layout.setAlignment(Qt.AlignTop)
-        title = QLabel("Estado de descanso")
-        title.setObjectName("eyebrow")
-        self.lbl_fatigue_score = QLabel("--- / 100")
-        self.lbl_fatigue_score.setObjectName("monitorScore")
-        self.lbl_fatigue_level = QLabel("En buen ritmo")
-        self.lbl_fatigue_level.setObjectName("stateBadge")
-        self.lbl_fatigue_confidence = QLabel("Confianza: ---")
-        self.lbl_fatigue_confidence.setObjectName("mutedText")
-        self.lbl_monitor_time = QLabel("00:00:00")
-        self.lbl_monitor_time.setObjectName("sessionTime")
-        self.btn_monitor_end = QPushButton("Finalizar sesión")
-        self.btn_monitor_end.setObjectName("dangerButton")
-        self.btn_monitor_end.clicked.connect(lambda: self._end_session())
-        for widget in (
-            title, self.lbl_fatigue_score, self.lbl_fatigue_level,
-            self.lbl_fatigue_confidence, self.lbl_monitor_time,
-            self.btn_monitor_end,
-        ):
-            score_layout.addWidget(widget)
-        self.lbl_monitor_continuous = QLabel("Uso continuo: 00:00:00")
-        self.lbl_monitor_continuous.setObjectName("sessionTime")
+        layout.addWidget(self.wellbeing_empty)
+        self.wellbeing_content = self._card()
+        content = QVBoxLayout(self.wellbeing_content)
+        self.lbl_wellbeing_state = QLabel("En buen ritmo")
+        self.lbl_wellbeing_state.setObjectName("sectionTitle")
+        self.lbl_monitor_time = self._centered("Tiempo de sesión: 00:00:00")
+        self.lbl_monitor_continuous = self._centered("Uso continuo: 00:00:00")
         self.lbl_monitor_next_break = QLabel("Próxima pausa en: -- min")
-        self.lbl_monitor_next_break.setObjectName("mutedText")
         self.lbl_monitor_breaks = QLabel("Aún no has realizado pausas en esta sesión.")
-        self.lbl_monitor_breaks.setObjectName("mutedText")
         for widget in (
-            self.lbl_monitor_continuous,
-            self.lbl_monitor_next_break,
+            self.lbl_wellbeing_state, self.lbl_monitor_time,
+            self.lbl_monitor_continuous, self.lbl_monitor_next_break,
             self.lbl_monitor_breaks,
         ):
-            score_layout.addWidget(widget)
-        self.lbl_current_state = QLabel("Estado actual · esperando evaluación")
-        self.lbl_current_state.setWordWrap(True)
-        self.lbl_current_state.setObjectName("stateBadge")
-        self.monitor_score_bar = QProgressBar()
-        self.monitor_score_bar.setRange(0, 100)
-        self.monitor_score_bar.setTextVisible(False)
-        self.lbl_recommendation = QLabel("La primera evaluación necesita una ventana de observación.")
-        self.lbl_recommendation.setWordWrap(True)
-        self.lbl_reasons = QLabel("¿Qué está detectando?\nEsperando datos suficientes.")
-        self.lbl_reasons.setWordWrap(True)
-        for widget in (self.lbl_current_state, self.monitor_score_bar,
-                       self.lbl_recommendation, self.lbl_reasons):
-            score_layout.addWidget(widget)
-        upper.addWidget(score_card, 1)
-        self.monitor_upper_layout = upper
-        monitor_layout.addLayout(upper, 1)
-
-        summary = QGridLayout()
-        self.monitor_summary_layout = summary
-        summary.setSpacing(12)
-        self.lbl_perclos_60s = self._metric("Cierre ocular (PERCLOS)", "---")
-        self.lbl_perclos_60s.setToolTip(
-            "Porcentaje de tiempo con los ojos cerrados durante el último minuto."
-        )
-        self.lbl_bpm = self._metric("Parpadeos por minuto", "---")
-        self.lbl_yawns = self._metric("Bostezos", "0")
-        self.lbl_yawns.setInterpretation("Aperturas sostenidas detectadas")
-        self.lbl_head_dev = self._metric("Postura", "Esperando detección facial")
-        for column, widget in enumerate(
-            (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev)
-        ):
-            summary.addWidget(widget, 0, column)
-            summary.setColumnStretch(column, 1)
-        monitor_layout.addLayout(summary)
-        self.lbl_metric_context = QLabel("Esperando detección facial")
-        self.lbl_metric_context.setWordWrap(True)
-        monitor_layout.addWidget(self.lbl_metric_context)
-        self.landmarks_toggle = QCheckBox("Mostrar puntos de detección")
-        self.landmarks_toggle.toggled.connect(self._set_landmarks_visible)
-        monitor_layout.addWidget(self.landmarks_toggle)
-        self.lbl_yawn_feedback = QLabel("")
-        monitor_layout.addWidget(self.lbl_yawn_feedback)
-        from PySide6.QtCore import QTimer
-        self.yawn_feedback_timer = QTimer(self)
-        self.yawn_feedback_timer.setSingleShot(True)
-        self.yawn_feedback_timer.timeout.connect(self.lbl_yawn_feedback.clear)
-        self._displayed_yawns = 0
-
-        self.advanced_toggle = QToolButton()
-        self.advanced_toggle.setText("Ver métricas avanzadas")
-        self.advanced_toggle.setObjectName("advancedButton")
-        self.advanced_toggle.setCheckable(True)
-        self.advanced_toggle.setArrowType(Qt.RightArrow)
-        self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.advanced_toggle.toggled.connect(self._toggle_advanced)
-        monitor_layout.addWidget(self.advanced_toggle, alignment=Qt.AlignLeft)
-
-        self.metrics_container = self._card()
-        advanced = QGridLayout(self.metrics_container)
-        self.lbl_ear = self._plain_metric("EAR: ---", "Apertura ocular estimada.")
-        self.lbl_eye_state = self._plain_metric("Estado ocular: UNKNOWN")
-        self.lbl_blinks = self._plain_metric("Parpadeos: 0")
-        self.lbl_perclos_5min = self._plain_metric("PERCLOS 5 min: ---")
-        self.lbl_prolonged_count = self._plain_metric("Cierres prolongados: 0")
-        self.lbl_closure_duration = self._plain_metric("Cierre actual: 0.0 s")
-        self.lbl_mar = self._plain_metric("MAR: ---", "Apertura de la boca estimada.")
-        self.lbl_pitch = self._plain_metric("Pitch: ---")
-        self.lbl_yaw = self._plain_metric("Yaw: ---")
-        self.lbl_roll = self._plain_metric("Roll: ---")
-        self.lbl_fatigue_signals = self._plain_metric("Razones principales: ---")
-        self.lbl_fatigue_signals.setWordWrap(True)
-        advanced_widgets = (
-            self.lbl_ear, self.lbl_eye_state, self.lbl_blinks,
-            self.lbl_perclos_5min, self.lbl_prolonged_count,
-            self.lbl_closure_duration, self.lbl_mar, self.lbl_pitch,
-            self.lbl_yaw, self.lbl_roll, self.lbl_fatigue_signals,
-        )
-        for index, widget in enumerate(advanced_widgets):
-            advanced.addWidget(widget, index // 3, index % 3)
-        self.metrics_container.setVisible(False)
-        monitor_layout.addWidget(self.metrics_container)
-        layout.addWidget(self.monitoring_content)
+            content.addWidget(widget)
+        self.btn_monitor_end = QPushButton("Finalizar sesión")
+        self.btn_monitor_end.setObjectName("dangerButton")
+        self.btn_monitor_end.clicked.connect(self._end_session)
+        content.addWidget(self.btn_monitor_end, alignment=Qt.AlignLeft)
+        layout.addWidget(self.wellbeing_content)
         return page
 
     def _build_history(self):
-        page, layout = self._page(
-            "Historial", "Revisa tus sesiones y hábitos de descanso"
-        )
+        page, layout = self._page("Historial", "Revisa tus sesiones y hábitos de descanso")
         overview = QGridLayout()
-        overview.setSpacing(12)
         self.lbl_week_sessions = self._metric("Sesiones últimos 7 días", "0")
         self.lbl_week_usage = self._metric("Tiempo total de uso", "00:00:00")
         self.lbl_week_breaks = self._metric("Pausas realizadas", "0")
-        self.lbl_week_continuous = self._metric(
-            "Promedio antes de una pausa", "Sin datos"
-        )
-        for index, widget in enumerate(
-            (
-                self.lbl_week_sessions, self.lbl_week_usage,
-                self.lbl_week_breaks, self.lbl_week_continuous,
-            )
-        ):
-            overview.addWidget(widget, index // 2, index % 2)
+        self.lbl_week_continuous = self._metric("Promedio antes de una pausa", "Sin datos")
+        for index, card in enumerate((self.lbl_week_sessions, self.lbl_week_usage,
+                                      self.lbl_week_breaks, self.lbl_week_continuous)):
+            overview.addWidget(card, index // 2, index % 2)
         layout.addLayout(overview)
-
-        self.lbl_period_summary = QLabel(
-            "Selecciona un usuario para consultar sus estadísticas."
-        )
+        self.lbl_period_summary = QLabel("Selecciona un usuario para consultar sus estadísticas.")
         self.lbl_period_summary.setWordWrap(True)
         self.lbl_period_summary.setObjectName("mutedText")
         layout.addWidget(self.lbl_period_summary)
-
-        content = QHBoxLayout()
-        content.setSpacing(16)
+        self.history_content_layout = QHBoxLayout()
         self.history_container = QScrollArea()
         self.history_container.setWidgetResizable(True)
         history_list = QWidget()
         self.history_list_layout = QVBoxLayout(history_list)
-        self.history_list_layout.setAlignment(Qt.AlignTop)
         self.history_list_layout.addStretch()
         self.history_container.setWidget(history_list)
-        self.history_content_layout = content
-        content.addWidget(self.history_container, 1)
-
+        self.history_content_layout.addWidget(self.history_container, 1)
         detail = self._card()
-        self.history_detail_card = detail
         detail_layout = QVBoxLayout(detail)
-        detail_title = QLabel("Detalle de sesión")
-        detail_title.setObjectName("sectionTitle")
-        self.lbl_session_detail = QLabel(
-            "Selecciona una sesión para consultar sus pausas y tiempos."
-        )
+        title = QLabel("Detalle de sesión")
+        title.setObjectName("sectionTitle")
+        self.lbl_session_detail = QLabel("Selecciona una sesión para consultar sus pausas y tiempos.")
         self.lbl_session_detail.setWordWrap(True)
-        self.lbl_session_detail.setAlignment(Qt.AlignTop)
-        detail_layout.addWidget(detail_title)
+        detail_layout.addWidget(title)
         detail_layout.addWidget(self.lbl_session_detail)
         detail_layout.addStretch()
-        content.addWidget(detail, 2)
-        layout.addLayout(content)
-
-        charts = QGridLayout()
-        self.history_charts_layout = charts
-        charts.setSpacing(14)
+        self.history_content_layout.addWidget(detail, 2)
+        layout.addLayout(self.history_content_layout)
+        self.history_charts_layout = QGridLayout()
         self.chart_daily_usage = self._create_chart_view()
         self.chart_daily_breaks = self._create_chart_view()
-        charts.addWidget(self.chart_daily_usage, 0, 0)
-        charts.addWidget(self.chart_daily_breaks, 0, 1)
-        layout.addLayout(charts)
+        self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
+        self.history_charts_layout.addWidget(self.chart_daily_breaks, 0, 1)
+        layout.addLayout(self.history_charts_layout)
         return page
 
-    def _build_trends(self):
-        page, layout = self._page(
-            "Configuración", "Intervalos del ciclo de trabajo y pausas"
-        )
+    def _build_settings(self):
         from app import config
-
-        settings = self._card()
-        settings_layout = QVBoxLayout(settings)
-        settings_title = QLabel("Configuración de bienestar")
-        settings_title.setObjectName("sectionTitle")
-        settings_text = QLabel(
+        page, layout = self._page("Configuración", "Intervalos del ciclo de trabajo y pausas")
+        card = self._card()
+        content = QVBoxLayout(card)
+        title = QLabel("Configuración de bienestar")
+        title.setObjectName("sectionTitle")
+        values = QLabel(
             f"Pausa recomendada cada {config.RECOMMENDED_BREAK_INTERVAL_MINUTES} min\n"
             f"Aviso previo: {config.BREAK_WARNING_ADVANCE_MINUTES} min\n"
             f"Duración sugerida: {config.SUGGESTED_BREAK_DURATION_MINUTES} min\n"
             f"Recordar después: {config.POSTPONE_TIME_MINUTES} min"
         )
-        settings_text.setWordWrap(True)
-        settings_text.setObjectName("mutedText")
-        settings_note = QLabel(
-            "Estos valores definen los recordatorios y el temporizador de pausa."
-        )
-        settings_note.setWordWrap(True)
-        settings_note.setObjectName("mutedText")
-        settings_layout.addWidget(settings_title)
-        settings_layout.addWidget(settings_text)
-        settings_layout.addWidget(settings_note)
-        layout.addWidget(settings)
-
-        overview = QGridLayout()
-        self.trends_overview_layout = overview
-        overview.setSpacing(12)
-        self.lbl_analytics_score = self._metric("Promedio últimos 7 días", "---")
-        self.lbl_analytics_score_30 = self._metric("Promedio últimos 30 días", "---")
-        self.lbl_analytics_moderate = self._metric("Tiempo hasta fatiga moderada", "---")
-        self.lbl_analytics_trend = self._metric("Tendencia", "Sin datos suficientes")
-        self.lbl_analytics_comparison = self._plain_metric("Comparación: ---")
-        self.lbl_analytics_sessions = self._plain_metric("Sesiones analizadas: 0")
-        for index, widget in enumerate(
-            (
-                self.lbl_analytics_score, self.lbl_analytics_score_30,
-                self.lbl_analytics_moderate, self.lbl_analytics_trend,
-            )
-        ):
-            overview.addWidget(widget, index // 2, index % 2)
-        layout.addLayout(overview)
-        layout.addWidget(self.lbl_analytics_comparison)
-        layout.addWidget(self.lbl_analytics_sessions)
-        for widget in (
-            self.lbl_analytics_score, self.lbl_analytics_score_30,
-            self.lbl_analytics_moderate, self.lbl_analytics_trend,
-            self.lbl_analytics_comparison, self.lbl_analytics_sessions,
-        ):
-            widget.setVisible(False)
-
-        self.chart_score = self._create_chart_view()
-        self.chart_moderate = self._create_chart_view()
-        self.chart_perclos = self._create_chart_view()
-        charts = QGridLayout()
-        self.trends_charts_layout = charts
-        charts.setSpacing(14)
-        charts.addWidget(self.chart_score, 0, 0, 1, 2)
-        charts.addWidget(self.chart_moderate, 1, 0)
-        charts.addWidget(self.chart_perclos, 1, 1)
-        layout.addLayout(charts)
-        self.chart_score.setVisible(False)
-        self.chart_moderate.setVisible(False)
-        self.chart_perclos.setVisible(False)
-
-        insights = self._card()
-        insights_layout = QVBoxLayout(insights)
-        insights_title = QLabel("Observaciones")
-        insights_title.setObjectName("sectionTitle")
-        self.lbl_longitudinal_insights = QLabel(
-            "Aún no hay suficientes datos para generar observaciones."
-        )
-        self.lbl_longitudinal_insights.setWordWrap(True)
-        insights_layout.addWidget(insights_title)
-        insights_layout.addWidget(self.lbl_longitudinal_insights)
-        layout.addWidget(insights)
-        insights.setVisible(False)
+        values.setObjectName("mutedText")
+        content.addWidget(title)
+        content.addWidget(values)
+        layout.addWidget(card)
         layout.addStretch()
         return page
 
     def _build_users(self):
-        page, layout = self._page(
-            "Usuarios", "Cada perfil mantiene sus propias sesiones y pausas"
-        )
+        page, layout = self._page("Usuarios", "Cada perfil mantiene sus propias sesiones y pausas")
         header = QHBoxLayout()
-        active = QLabel("Selecciona el perfil que utilizará la aplicación")
-        active.setObjectName("mutedText")
+        header.addWidget(QLabel("Selecciona el perfil que utilizará la aplicación"))
+        header.addStretch()
         self.btn_create_user = QPushButton("Crear usuario")
         self.btn_create_user.setObjectName("primaryButton")
         self.btn_create_user.clicked.connect(self._show_create_user_dialog)
-        header.addWidget(active)
-        header.addStretch()
         header.addWidget(self.btn_create_user)
         layout.addLayout(header)
-
         self.users_container = QScrollArea()
         self.users_container.setWidgetResizable(True)
-        users_list = QWidget()
-        self.users_list_layout = QVBoxLayout(users_list)
-        self.users_list_layout.setAlignment(Qt.AlignTop)
+        users = QWidget()
+        self.users_list_layout = QVBoxLayout(users)
         self.users_list_layout.addStretch()
-        self.users_container.setWidget(users_list)
+        self.users_container.setWidget(users)
         layout.addWidget(self.users_container)
         return page
 
     def _navigate(self, index):
         if index == self.PAGE_USERS:
             self._load_users()
+        if index == self.PAGE_HISTORY:
+            self._load_history()
         self.pages.setCurrentIndex(index)
-        for button_index, button in enumerate(self.nav_buttons):
-            button.setChecked(button_index == index)
-
-    def _toggle_advanced(self, checked):
-        self.metrics_container.setVisible(checked)
-        self.advanced_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        self.advanced_toggle.setText(
-            "Ocultar métricas avanzadas" if checked else "Ver métricas avanzadas"
-        )
+        for position, button in enumerate(self.nav_buttons):
+            button.setChecked(position == index)
 
     def _start_session(self):
-        from ui.theme import style_level
-        style_level(self.lbl_current_state)
-        style_level(self.lbl_fatigue_level)
-        for card in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_head_dev):
-            card.setInterpretation("Esperando datos")
-        self._displayed_yawns = 0
-        self.lbl_yawn_feedback.clear()
-        self.yawn_feedback_timer.stop()
-        self.lbl_current_state.setText("Estado actual · esperando evaluación")
-        self.lbl_recommendation.setText("La primera evaluación necesita una ventana de observación.")
-        self.lbl_reasons.setText("¿Qué está detectando?\nEsperando datos suficientes.")
-        self.monitor_score_bar.setValue(0)
         super()._start_session()
         if self.session_service and self.session_service.get_active_session():
-            self.metrics_container.setVisible(self.advanced_toggle.isChecked())
-            self._navigate(self.PAGE_MONITORING)
+            self._navigate(self.PAGE_WELLBEING)
 
     def _end_session(self, show_summary=True):
         super()._end_session(show_summary)
@@ -665,68 +315,143 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _update_session_ui_state(self):
         super()._update_session_ui_state()
-        self.lbl_status.setStyleSheet("")
-        active = bool(
-            self.session_service and self.session_service.get_active_session()
-        )
-        has_user = bool(self.user_service and self.user_service.get_active_user())
-        self.home_empty.setVisible(not has_user)
-        self.home_content.setVisible(has_user)
-        self.monitoring_empty.setVisible(not active)
-        self.monitoring_content.setVisible(active)
+        active = bool(self.session_service and self.session_service.get_active_session())
+        user = self.user_service.get_active_user() if self.user_service else None
+        self.home_empty.setVisible(not user)
+        self.home_content.setVisible(bool(user))
+        self.wellbeing_empty.setVisible(not active)
+        self.wellbeing_content.setVisible(active)
         self.btn_monitor_end.setVisible(active)
-        
-        self.home_fatigue_card.setVisible(True)
-        self.monitor_video_card.setVisible(False)
-        for widget in (
-            self.lbl_fatigue_score, self.lbl_fatigue_confidence,
-            self.lbl_current_state, self.monitor_score_bar,
-            self.lbl_recommendation, self.lbl_reasons,
-            self.lbl_metric_context, self.landmarks_toggle,
-            self.lbl_yawn_feedback, self.lbl_perclos_60s,
-            self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev,
-        ):
-            widget.setVisible(False)
-        self.lbl_fatigue_level.setVisible(True)
-        self.advanced_toggle.setVisible(False)
-        self.metrics_container.setVisible(False)
-
-        if active:
-            self.lbl_status.setText("Trabajando")
-        else:
+        if not active:
             self.lbl_status.setText("Sin sesión")
             self.lbl_home_level.setText("Sin sesión activa")
-            self.lbl_fatigue_level.setText("Sin sesión activa")
-            self.lbl_monitor_continuous.setText("Uso continuo: 00:00:00")
-            self.lbl_monitor_next_break.setText("Próxima pausa en: -- min")
 
     def _update_active_user_display(self):
         super()._update_active_user_display()
-        self.lbl_active_user.setStyleSheet("")
         user = self.user_service.get_active_user() if self.user_service else None
         self.lbl_home_user.setText(f"Hola, {user.name}" if user else "Hola")
-        self._update_session_ui_state()
+
+    def _update_session_time(self):
+        if not self.wellbeing_service:
+            return
+        state = self.wellbeing_service.get_state()
+        if not state:
+            return
+        from wellbeing.models import CycleState
+        cycle = self.wellbeing_service.get_cycle_state()
+        state_text = {
+            CycleState.WORKING: "En buen ritmo",
+            CycleState.BREAK_DUE_SOON: "Pausa próxima",
+            CycleState.BREAK_DUE: "Es momento de una pausa",
+            CycleState.BREAKING: "Pausa en curso",
+        }[cycle]
+        self.lbl_home_level.setText(state_text)
+        self.lbl_wellbeing_state.setText(state_text)
+        self.lbl_status.setText({
+            CycleState.WORKING: "Trabajando",
+            CycleState.BREAK_DUE_SOON: "Pausa recomendada pronto",
+            CycleState.BREAK_DUE: "Pausa recomendada",
+            CycleState.BREAKING: "En pausa",
+        }[cycle])
+        session_text = self._duration_text(state.session_elapsed_seconds)
+        continuous_text = self._duration_text(state.continuous_usage_seconds)
+        self.lbl_elapsed.setText(f"Tiempo de sesión: {session_text}")
+        self.lbl_monitor_time.setText(f"Tiempo de sesión: {session_text}")
+        self.lbl_continuous_usage.setText(f"Uso continuo: {continuous_text}")
+        self.lbl_monitor_continuous.setText(f"Uso continuo: {continuous_text}")
+        remaining = self.wellbeing_service.get_time_until_next_break()
+        next_text = f"Próxima pausa en: {max(1, remaining // 60)} min"
+        self.lbl_break_info.setText(next_text)
+        self.lbl_monitor_next_break.setText(next_text)
+        self.lbl_monitor_breaks.setText(
+            f"Pausas realizadas en esta sesión: {state.completed_breaks}"
+            if state.completed_breaks else "Aún no has realizado pausas en esta sesión."
+        )
+        self.break_reminder_card.setVisible(cycle == CycleState.BREAK_DUE)
+        self.breaking_card.setVisible(cycle == CycleState.BREAKING)
+        if cycle == CycleState.BREAK_DUE:
+            self.lbl_reminder_body.setText(
+                f"Llevas {state.continuous_usage_seconds // 60} minutos de uso continuo."
+            )
+            if not self._reminder_recommendation_visible:
+                self._set_reminder_recommendation()
+                self._reminder_recommendation_visible = True
+        elif cycle == CycleState.BREAKING:
+            started = self.wellbeing_service.get_break_started_at()
+            self.lbl_breaking_since.setText(
+                f"Desde: {started.strftime('%H:%M:%S')}" if started else ""
+            )
+            elapsed = self.wellbeing_service.get_break_elapsed_seconds()
+            left = self.wellbeing_service.get_break_remaining_seconds()
+            self.lbl_break_timer.setText(
+                f"{left // 60:02d}:{left % 60:02d} restantes · "
+                f"{elapsed // 60:02d}:{elapsed % 60:02d} transcurridos"
+            )
+            if started != self._recommendation_break_key:
+                self._recommendation_break_key = started
+                self._set_break_recommendations()
+        else:
+            self._reminder_recommendation_visible = False
+            self._recommendation_break_key = None
+        self.lbl_break_completed.setVisible(
+            self.wellbeing_service.was_break_completed_recently()
+            and cycle != CycleState.BREAKING
+        )
+
+    def _on_start_break(self):
+        self.wellbeing_service.start_break()
+        self._update_session_time()
+
+    def _on_postpone(self):
+        self.wellbeing_service.postpone()
+        self._update_session_time()
+
+    def _on_finish_break(self):
+        self.wellbeing_service.complete_break()
+        self._update_session_time()
+
+    def _recommendation_context(self, break_active=False):
+        from app import config
+        from wellbeing.recommendations import RecommendationContext
+        state = self.wellbeing_service.get_state()
+        return RecommendationContext(
+            continuous_usage_seconds=state.continuous_usage_seconds,
+            break_active=break_active,
+            break_duration_seconds=config.SUGGESTED_BREAK_DURATION_MINUTES * 60,
+            completed_breaks=state.completed_breaks,
+            postponed_breaks=state.postponed_breaks,
+        )
+
+    def _set_reminder_recommendation(self):
+        if not self.recommendation_service:
+            self.lbl_reminder_tip.setText(
+                "Una pausa breve puede ayudarte a descansar la vista y cambiar de postura."
+            )
+            return
+        self.lbl_reminder_tip.setText(
+            self.recommendation_service.select(self._recommendation_context())[0].text
+        )
+
+    def _set_break_recommendations(self):
+        if not self.recommendation_service:
+            self.lbl_break_suggestions_title.hide()
+            self.lbl_break_suggestions.clear()
+            return
+        selected = self.recommendation_service.select(
+            self._recommendation_context(True), limit=2
+        )
+        self.lbl_break_suggestions_title.show()
+        self.lbl_break_suggestions.setText(
+            "\n".join(f"• {item.text}" for item in selected)
+        )
 
     def _load_history(self):
         super()._load_history()
         user = self.user_service.get_active_user() if self.user_service else None
         analytics = self.wellbeing_analytics_service
         if not user or not analytics:
-            self.lbl_week_sessions.setText("0")
-            self.lbl_week_usage.setText("00:00:00")
-            self.lbl_week_breaks.setText("0")
-            self.lbl_week_continuous.setText("Sin datos")
-            self.lbl_period_summary.setText(
-                "Selecciona un usuario para consultar sus estadísticas."
-            )
-            self._set_line_chart(
-                self.chart_daily_usage, "Tiempo de uso por día", [], "Horas"
-            )
-            self._set_line_chart(
-                self.chart_daily_breaks, "Pausas por día", [], "Pausas"
-            )
+            self._empty_history_analytics()
             return
-
         week = analytics.period_stats(user.id, 7)
         month = analytics.period_stats(user.id, 30)
         self.lbl_week_sessions.setText(str(week.session_count))
@@ -744,439 +469,119 @@ class ModernDashboardWidget(DashboardWidget):
             f"{analytics.compare_weekly_breaks(user.id)}"
         )
         daily = analytics.daily_stats(user.id, 7)
-        usage_points = [
-            (datetime.combine(day, datetime.min.time()), seconds / 3600)
-            for day, seconds, _ in daily
-        ]
-        break_points = [
-            (datetime.combine(day, datetime.min.time()), count)
-            for day, _, count in daily
-        ]
         self._set_line_chart(
-            self.chart_daily_usage,
-            "Tiempo de uso por día",
-            usage_points,
-            "Horas",
+            self.chart_daily_usage, "Tiempo de uso por día",
+            [(datetime.combine(day, datetime.min.time()), seconds / 3600)
+             for day, seconds, _ in daily], "Horas",
         )
         self._set_line_chart(
-            self.chart_daily_breaks,
-            "Pausas realizadas por día",
-            break_points,
-            "Pausas",
+            self.chart_daily_breaks, "Pausas realizadas por día",
+            [(datetime.combine(day, datetime.min.time()), count)
+             for day, _, count in daily], "Pausas",
         )
 
-    def _update_baseline_label(self):
-        self.lbl_baseline_status.setText("")
+    def _empty_history_analytics(self):
+        self.lbl_week_sessions.setText("0")
+        self.lbl_week_usage.setText("00:00:00")
+        self.lbl_week_breaks.setText("0")
+        self.lbl_week_continuous.setText("Sin datos")
+        self.lbl_period_summary.setText("Selecciona un usuario para consultar sus estadísticas.")
+        self._set_line_chart(self.chart_daily_usage, "Tiempo de uso por día", [], "Horas")
+        self._set_line_chart(self.chart_daily_breaks, "Pausas por día", [], "Pausas")
 
     def _create_user_widget(self, user):
         card = self._card()
         layout = QHBoxLayout(card)
+        info = QVBoxLayout()
         name = QLabel(user.name)
         name.setObjectName("sectionTitle")
-        name.setWordWrap(True)
-        details = QVBoxLayout()
-        details.addWidget(name)
+        info.addWidget(name)
         if user.created_at:
-            from datetime import datetime
             try:
-                date_text = datetime.fromisoformat(user.created_at).strftime("%d/%m/%Y")
+                created = datetime.fromisoformat(user.created_at).strftime("%d/%m/%Y")
             except (ValueError, TypeError):
-                date_text = str(user.created_at)
-            created = QLabel("Creado: " + date_text)
-            created.setObjectName("mutedText")
-            details.addWidget(created)
-        layout.addLayout(details, 1)
+                created = str(user.created_at)
+            info.addWidget(QLabel("Creado: " + created))
+        layout.addLayout(info, 1)
         select = QPushButton("Seleccionar perfil")
         select.setObjectName("secondaryButton")
         select.clicked.connect(lambda: self._select_user(user))
         layout.addWidget(select)
         return card
 
-    @staticmethod
-    def _set_line_chart(view, title, points, y_title):
-        from ui.theme import style_chart
-        DashboardWidget._set_line_chart(view, title, points, y_title)
-        style_chart(view.chart())
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        compact = event.size().width() < 1300
-        if compact:
-            self.home_cards_layout.addWidget(self.home_welcome_card, 0, 0)
-            self.home_cards_layout.addWidget(self.home_fatigue_card, 1, 0)
-            self.monitor_upper_layout.setDirection(QVBoxLayout.TopToBottom)
-            for index, widget in enumerate(
-                (
-                    self.lbl_perclos_60s, self.lbl_bpm,
-                    self.lbl_yawns, self.lbl_head_dev,
-                )
-            ):
-                self.monitor_summary_layout.addWidget(
-                    widget, index // 2, index % 2
-                )
-            self.history_content_layout.setDirection(QHBoxLayout.TopToBottom)
-            self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
-            self.history_charts_layout.addWidget(self.chart_daily_breaks, 1, 0)
-            for index, widget in enumerate(
-                (
-                    self.lbl_analytics_score,
-                    self.lbl_analytics_score_30,
-                    self.lbl_analytics_moderate,
-                    self.lbl_analytics_trend,
-                )
-            ):
-                self.trends_overview_layout.addWidget(widget, index, 0)
-            self.trends_charts_layout.addWidget(self.chart_score, 0, 0)
-            self.trends_charts_layout.addWidget(self.chart_moderate, 1, 0)
-            self.trends_charts_layout.addWidget(self.chart_perclos, 2, 0)
-        else:
-            self.home_cards_layout.addWidget(self.home_welcome_card, 0, 0)
-            self.home_cards_layout.addWidget(self.home_fatigue_card, 0, 1)
-            self.monitor_upper_layout.setDirection(QHBoxLayout.LeftToRight)
-            for index, widget in enumerate(
-                (
-                    self.lbl_perclos_60s, self.lbl_bpm,
-                    self.lbl_yawns, self.lbl_head_dev,
-                )
-            ):
-                self.monitor_summary_layout.addWidget(widget, 0, index)
-            self.history_content_layout.setDirection(QHBoxLayout.LeftToRight)
-            self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
-            self.history_charts_layout.addWidget(self.chart_daily_breaks, 0, 1)
-            for index, widget in enumerate(
-                (
-                    self.lbl_analytics_score,
-                    self.lbl_analytics_score_30,
-                    self.lbl_analytics_moderate,
-                    self.lbl_analytics_trend,
-                )
-            ):
-                self.trends_overview_layout.addWidget(widget, index // 2, index % 2)
-            self.trends_charts_layout.addWidget(self.chart_score, 0, 0, 1, 2)
-            self.trends_charts_layout.addWidget(self.chart_moderate, 1, 0)
-            self.trends_charts_layout.addWidget(self.chart_perclos, 1, 1)
-
-    def _update_session_time(self):
-        super()._update_session_time()
-        value = self.lbl_elapsed.text().replace("Sesión: ", "").replace("Transcurrido: ", "")
-        self.lbl_monitor_time.setText(value)
-
-        if not self.wellbeing_service:
-            return
-
-        from wellbeing.models import CycleState
-        cycle = self.wellbeing_service.get_cycle_state()
-
-        labels = {
-            CycleState.WORKING: "En buen ritmo",
-            CycleState.BREAK_DUE_SOON: "Pausa próxima",
-            CycleState.BREAK_DUE: "Es momento de una pausa",
-            CycleState.BREAKING: "Pausa en curso",
-        }
-        state_label = labels[cycle]
-        self.lbl_home_level.setText(state_label)
-        self.lbl_fatigue_level.setText(state_label)
-        self.lbl_status.setText(
-            {
-                CycleState.WORKING: "Trabajando",
-                CycleState.BREAK_DUE_SOON: "Pausa recomendada pronto",
-                CycleState.BREAK_DUE: "Pausa recomendada",
-                CycleState.BREAKING: "En pausa",
-            }[cycle]
-        )
-
-        state = self.wellbeing_service.get_state()
-        if state:
-            continuous = state.continuous_usage_seconds
-            self.lbl_monitor_continuous.setText(
-                f"Uso continuo: {continuous // 3600:02d}:"
-                f"{continuous % 3600 // 60:02d}:{continuous % 60:02d}"
-            )
-            if state.completed_breaks:
-                self.lbl_monitor_breaks.setText(
-                    f"Pausas realizadas en esta sesión: {state.completed_breaks}"
-                )
-            else:
-                self.lbl_monitor_breaks.setText(
-                    "Aún no has realizado pausas en esta sesión."
-                )
-
-        until_break = self.wellbeing_service.get_time_until_next_break()
-        self.lbl_monitor_next_break.setText(
-            f"Próxima pausa en: {max(1, until_break // 60)} min"
-        )
-
-        if cycle == CycleState.BREAKING:
-            self.break_reminder_card.setVisible(False)
-            self.breaking_card.setVisible(True)
-            started = self.wellbeing_service.get_break_started_at()
-            if started:
-                self.lbl_breaking_since.setText(
-                    f"Desde: {started.strftime('%H:%M:%S')}"
-                )
-            remaining = self.wellbeing_service.get_break_remaining_seconds()
-            elapsed = self.wellbeing_service.get_break_elapsed_seconds()
-            self.lbl_break_timer.setText(
-                f"{remaining // 60:02d}:{remaining % 60:02d} restantes · "
-                f"{elapsed // 60:02d}:{elapsed % 60:02d} transcurridos"
-            )
-            if started != self._recommendation_break_key:
-                self._recommendation_break_key = started
-                self._set_break_recommendations()
-            self.lbl_break_completed.setVisible(False)
-            self.lbl_break_info.setVisible(False)
-            self.lbl_continuous_usage.setVisible(False)
-            self.lbl_monitor_continuous.setVisible(False)
-            self.lbl_monitor_next_break.setVisible(False)
-        elif cycle == CycleState.BREAK_DUE:
-            self.breaking_card.setVisible(False)
-            if self.wellbeing_service.is_reminder_active() or self.wellbeing_service.should_show_reminder():
-                state = self.wellbeing_service.get_state()
-                if state:
-                    mins = state.continuous_usage_seconds // 60
-                    self.lbl_reminder_body.setText(
-                        f"Llevas {mins} minutos de uso continuo."
-                    )
-                self.break_reminder_card.setVisible(True)
-                if not self._reminder_recommendation_visible:
-                    self._set_reminder_recommendation()
-                    self._reminder_recommendation_visible = True
-            self.lbl_break_info.setVisible(False)
-        else:
-            self.break_reminder_card.setVisible(False)
-            self.breaking_card.setVisible(False)
-            self.lbl_break_completed.setVisible(
-                self.wellbeing_service.was_break_completed_recently()
-            )
-            self._reminder_recommendation_visible = False
-            if cycle != CycleState.BREAKING:
-                self._recommendation_break_key = None
-            self.lbl_continuous_usage.setVisible(True)
-            self.lbl_monitor_continuous.setVisible(True)
-            self.lbl_monitor_next_break.setVisible(True)
-
-    def _on_start_break(self):
-        if self.wellbeing_service:
-            self.wellbeing_service.start_break()
-
-    def _on_postpone(self):
-        if self.wellbeing_service:
-            self.wellbeing_service.postpone()
-            self.break_reminder_card.setVisible(False)
-
-    def _on_finish_break(self):
-        if self.wellbeing_service:
-            self.wellbeing_service.complete_break()
-
-    def _recommendation_context(self, break_active=False):
-        from app import config
-        from wellbeing.recommendations import RecommendationContext
-
-        state = self.wellbeing_service.get_state()
-        return RecommendationContext(
-            continuous_usage_seconds=(
-                state.continuous_usage_seconds if state else 0
-            ),
-            break_active=break_active,
-            break_duration_seconds=(
-                config.SUGGESTED_BREAK_DURATION_MINUTES * 60
-            ),
-            completed_breaks=state.completed_breaks if state else 0,
-            postponed_breaks=state.postponed_breaks if state else 0,
-        )
-
-    def _set_reminder_recommendation(self):
-        if not self.recommendation_service:
-            self.lbl_reminder_tip.setText(
-                "Una pausa breve puede ayudarte a descansar la vista "
-                "y cambiar de postura."
-            )
-            return
-        selected = self.recommendation_service.select(
-            self._recommendation_context(), limit=1
-        )
-        self.lbl_reminder_tip.setText(selected[0].text)
-
-    def _set_break_recommendations(self):
-        if not self.recommendation_service:
-            self.lbl_break_suggestions.setText("")
-            self.lbl_break_suggestions_title.setVisible(False)
-            return
-        selected = self.recommendation_service.select(
-            self._recommendation_context(break_active=True), limit=2
-        )
-        self.lbl_break_suggestions_title.setVisible(True)
-        self.lbl_break_suggestions.setText(
-            "\n".join(f"• {item.text}" for item in selected)
-        )
-
-    def _reset_fatigue_ui(self):
-        super()._reset_fatigue_ui()
-        self._sync_score()
-
-    def _update_fatigue_assessment(self, *args, **kwargs):
-        super()._update_fatigue_assessment(*args, **kwargs)
-        self._sync_score()
-        assessment = getattr(self, "current_assessment", None)
-        if assessment is not None:
-            from ui.fatigue_feedback import level_feedback, readable_reasons
-            title, recommendation, color = level_feedback(assessment.level)
-            from ui.theme import style_level
-            style_level(self.lbl_current_state, color)
-            style_level(self.lbl_fatigue_level, color)
-            self.lbl_current_state.setText("Estado actual\n" + title)
-            self.lbl_recommendation.setText(recommendation)
-            self.monitor_score_bar.setValue(round(assessment.score))
-            self.monitor_score_bar.setStyleSheet(
-                f"QProgressBar::chunk {{ background: {color}; }}"
-            )
-            self.lbl_reasons.setText("¿Qué está detectando?\n" + readable_reasons(assessment.reasons))
-
-    def _start_monitoring_worker(self):
-        super()._start_monitoring_worker()
-        self._set_landmarks_visible(self.landmarks_toggle.isChecked())
-
-    def _set_landmarks_visible(self, enabled):
-        worker = self.monitoring_worker
-        if worker is not None:
-            worker.show_landmarks.set() if enabled else worker.show_landmarks.clear()
-
-    def _on_monitoring_sample(self, sample):
-        super()._on_monitoring_sample(sample)
-        self.lbl_face_status.setStyleSheet("")
-        if not sample.analyzed:
-            return
-        count = sample.yawn_metrics.total_yawns
-        if count > self._displayed_yawns:
-            self.lbl_yawn_feedback.setText("Bostezo detectado")
-            self.yawn_feedback_timer.start(3500)
-        self._displayed_yawns = count
-        if not sample.face_detected:
-            self.lbl_metric_context.setText("Sin detección facial: interpretación no disponible.")
-            for card in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_head_dev):
-                card.setInterpretation("Sin detección facial")
-            return
-        from ui.fatigue_feedback import metric_context
-        baseline = self.baseline_service.get_baseline() if self.baseline_service else None
-        self.lbl_metric_context.setText(metric_context(sample, baseline, self.fatigue_engine.config))
-        parts = self.lbl_metric_context.text().split(" · ")
-        for card, interpretation in zip(
-            (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_head_dev), parts
-        ):
-            card.setInterpretation(interpretation.split(": ", 1)[-1])
-        self.lbl_metric_context.hide()
-
-    def _sync_score(self):
-        text = self.lbl_fatigue_score.text()
-        digits = "".join(char for char in text.split("/")[0] if char.isdigit())
-        value = int(digits) if digits else 0
-        if value < 20:
-            color = "#238a5a"
-        elif value < 40:
-            color = "#b77900"
-        elif value < 60:
-            color = "#d96812"
-        else:
-            color = "#c93737"
-        self.home_score_bar.setValue(max(0, min(value, 100)))
-        self.home_score_bar.setStyleSheet(
-            f"QProgressBar::chunk {{ background: {color}; border-radius: 5px; }}"
-        )
-        if digits:
-            self.lbl_fatigue_score.setText(f"{value} / 100")
-        level_text = self.lbl_fatigue_level.text()
-        translations = {
-            "VERY_HIGH": "Muy alta",
-            "MODERATE": "Moderada",
-            "NORMAL": "Normal",
-            "MILD": "Leve",
-            "HIGH": "Alta",
-        }
-        for source, target in translations.items():
-            level_text = level_text.replace(source, target)
-        self.lbl_fatigue_level.setText(level_text)
-
     def _create_session_widget(self, session):
-        widget = self._card()
-        layout = QHBoxLayout(widget)
+        card = self._card()
+        layout = QHBoxLayout(card)
         text = QVBoxLayout()
-        date = session.started_at.strftime("%d/%m/%Y · %H:%M") if session.started_at else "Fecha desconocida"
-        title = QLabel(date)
+        title = QLabel(
+            session.started_at.strftime("%d/%m/%Y · %H:%M")
+            if session.started_at else "Fecha desconocida"
+        )
         title.setObjectName("sectionTitle")
-        duration = "En curso"
-        if session.duration_seconds is not None:
-            hours, remainder = divmod(session.duration_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         summary = (
             self.wellbeing_analytics_service.session_summary(session)
             if self.wellbeing_analytics_service else None
         )
-        pauses = summary.completed_breaks if summary else 0
-        max_continuous = (
+        max_usage = (
             self._duration_text(summary.max_continuous_usage_seconds)
             if summary and summary.has_break_data else "Sin datos de pausas"
         )
-        subtitle = QLabel(
-            f"Duración: {duration}   ·   Pausas: {pauses}   ·   "
-            f"Uso continuo máximo: {max_continuous}"
+        detail = QLabel(
+            f"Duración: {self._duration_text(session.duration_seconds)} · "
+            f"Pausas: {summary.completed_breaks if summary else 0} · "
+            f"Uso continuo máximo: {max_usage}"
         )
-        subtitle.setObjectName("mutedText")
-        subtitle.setWordWrap(True)
+        detail.setObjectName("mutedText")
         text.addWidget(title)
-        text.addWidget(subtitle)
+        text.addWidget(detail)
         layout.addLayout(text, 1)
         button = QPushButton("Ver detalle")
         button.setObjectName("secondaryButton")
-        button.clicked.connect(lambda _, value=session: self._show_session_detail(value))
+        button.clicked.connect(lambda: self._show_session_detail(session))
         layout.addWidget(button)
-        return widget
+        return card
 
     def _show_session_detail(self, session):
         summary = (
             self.wellbeing_analytics_service.session_summary(session)
             if self.wellbeing_analytics_service else None
         )
-        date = (
-            session.started_at.strftime("%d/%m/%Y %H:%M")
-            if session.started_at else "---"
-        )
-        ended = (
-            session.ended_at.strftime("%H:%M:%S")
-            if session.ended_at else "En curso"
-        )
         if not summary or not summary.has_break_data:
-            break_detail = "Sin datos de pausas"
-            completed = postponed = 0
-            total_break = average_break = max_continuous = "---"
-            work = self._duration_text(session.duration_seconds or 0)
+            pauses = "Sin datos de pausas"
         else:
-            completed = summary.completed_breaks
-            postponed = summary.postponed_breaks
-            total_break = self._duration_text(summary.break_seconds)
-            average_break = self._duration_text(summary.average_break_seconds)
-            max_continuous = self._duration_text(
-                summary.max_continuous_usage_seconds
-            )
-            work = self._duration_text(summary.work_seconds)
-            break_detail = "\n".join(
+            pauses = "\n".join(
                 f"  Pausa {index}: {self._duration_text(seconds)}"
-                for index, seconds in enumerate(
-                    summary.break_durations_seconds, start=1
-                )
+                for index, seconds in enumerate(summary.break_durations_seconds, 1)
             ) or "Sin pausas completadas"
         self.lbl_session_detail.setText(
-            f"Fecha: {date}\n"
-            f"Hora de término: {ended}\n"
-            f"Duración total: {self._duration_text(session.duration_seconds or 0)}\n"
-            f"Tiempo de trabajo: {work}\n"
-            f"Tiempo total en pausa: {total_break}\n"
-            f"Pausas realizadas: {completed}\n"
-            f"Pausas pospuestas: {postponed}\n"
-            f"Mayor período de uso continuo: {max_continuous}\n"
-            f"Duración promedio de pausa: {average_break}\n"
-            f"Detalle de pausas:\n{break_detail}"
+            f"Inicio: {session.started_at.strftime('%d/%m/%Y %H:%M') if session.started_at else '---'}\n"
+            f"Término: {session.ended_at.strftime('%H:%M:%S') if session.ended_at else 'En curso'}\n"
+            f"Duración total: {self._duration_text(session.duration_seconds)}\n"
+            + (f"Tiempo de trabajo: {self._duration_text(summary.work_seconds)}\n"
+               f"Tiempo en pausa: {self._duration_text(summary.break_seconds)}\n"
+               f"Pausas realizadas: {summary.completed_breaks}\n"
+               f"Pausas pospuestas: {summary.postponed_breaks}\n"
+               f"Uso continuo máximo: {self._duration_text(summary.max_continuous_usage_seconds)}\n"
+               f"Promedio de pausa: {self._duration_text(summary.average_break_seconds)}\n"
+               if summary and summary.has_break_data else "")
+            + f"Detalle de pausas:\n{pausas}"
         )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        compact = event.size().width() < 1000
+        if compact:
+            self.home_cards_layout.addWidget(self.home_welcome_card, 0, 0)
+            self.home_cards_layout.addWidget(self.home_state_card, 1, 0)
+            self.history_content_layout.setDirection(QHBoxLayout.TopToBottom)
+            self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
+            self.history_charts_layout.addWidget(self.chart_daily_breaks, 1, 0)
+        else:
+            self.home_cards_layout.addWidget(self.home_welcome_card, 0, 0)
+            self.home_cards_layout.addWidget(self.home_state_card, 0, 1)
+            self.history_content_layout.setDirection(QHBoxLayout.LeftToRight)
+            self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
+            self.history_charts_layout.addWidget(self.chart_daily_breaks, 0, 1)
 
     @staticmethod
     def _duration_text(value):
@@ -1184,6 +589,13 @@ class ModernDashboardWidget(DashboardWidget):
         hours, remainder = divmod(seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    @staticmethod
+    def _centered(text):
+        label = QLabel(text)
+        label.setObjectName("sessionTime")
+        label.setAlignment(Qt.AlignCenter)
+        return label
 
     @staticmethod
     def _page(title, subtitle):
@@ -1195,7 +607,6 @@ class ModernDashboardWidget(DashboardWidget):
         heading.setObjectName("pageTitle")
         caption = QLabel(subtitle)
         caption.setObjectName("pageSubtitle")
-        caption.setWordWrap(True)
         layout.addWidget(heading)
         layout.addWidget(caption)
         return page, layout
@@ -1225,15 +636,7 @@ class ModernDashboardWidget(DashboardWidget):
         value_label.setObjectName("metricValue")
         layout.addWidget(title_label)
         layout.addWidget(value_label)
-        card.setProperty("valueLabel", value_label)
         return _MetricCard(card, value_label)
-
-    @staticmethod
-    def _plain_metric(text, tooltip=""):
-        label = QLabel(text)
-        label.setObjectName("plainMetric")
-        label.setToolTip(tooltip)
-        return label
 
     @staticmethod
     def _empty_state(title, subtitle):
@@ -1244,11 +647,9 @@ class ModernDashboardWidget(DashboardWidget):
         heading = QLabel(title)
         heading.setObjectName("sectionTitle")
         heading.setAlignment(Qt.AlignCenter)
-        heading.setWordWrap(True)
         caption = QLabel(subtitle)
         caption.setObjectName("mutedText")
         caption.setAlignment(Qt.AlignCenter)
-        caption.setWordWrap(True)
         layout.addWidget(heading)
         layout.addWidget(caption)
         return frame
@@ -1259,40 +660,35 @@ class ModernDashboardWidget(DashboardWidget):
         view = DashboardWidget._create_chart_view()
         style_chart(view.chart())
         view.setRenderHint(QPainter.Antialiasing)
-        view.setMinimumHeight(210)
         return view
+
+    @staticmethod
+    def _set_line_chart(view, title, points, y_title):
+        from ui.theme import style_chart
+        DashboardWidget._set_line_chart(view, title, points, y_title)
+        style_chart(view.chart())
 
     @staticmethod
     def _theme():
         from ui.theme import QSS
         return QSS
 
-class _MetricCard(QFrame):
-    """Card-compatible label adapter used by existing presentation methods."""
 
+class _MetricCard(QFrame):
     def __init__(self, card, value_label):
         super().__init__()
         self.setObjectName("card")
         self._value_label = value_label
-        layout = card.layout()
-        while layout.count():
-            item = layout.takeAt(0)
+        layout = QVBoxLayout(self)
+        source = card.layout()
+        while source.count():
+            item = source.takeAt(0)
             if item.widget():
                 item.widget().setParent(self)
-                QVBoxLayout(self) if self.layout() is None else None
-                self.layout().addWidget(item.widget())
-        self._value_label.setWordWrap(True)
-        self._interpretation = QLabel("")
-        self._interpretation.setObjectName("mutedText")
-        self._interpretation.setWordWrap(True)
-        self.layout().addWidget(self._interpretation)
-
-    def setInterpretation(self, text):
-        self._interpretation.setText(text)
+                layout.addWidget(item.widget())
 
     def setText(self, text):
-        value = text.split(":", 1)[-1].strip() if ":" in text else text
-        self._value_label.setText(value)
+        self._value_label.setText(text.split(":", 1)[-1].strip())
 
     def text(self):
         return self._value_label.text()
