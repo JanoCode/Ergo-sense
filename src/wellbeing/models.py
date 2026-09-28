@@ -3,11 +3,18 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+
 class CycleState(Enum):
     WORKING = "WORKING"
     BREAK_DUE_SOON = "BREAK_DUE_SOON"
     BREAK_DUE = "BREAK_DUE"
     BREAKING = "BREAKING"
+
+
+class BreakEventType(Enum):
+    BREAK_STARTED = "BREAK_STARTED"
+    BREAK_POSTPONED = "BREAK_POSTPONED"
+
 
 @dataclass
 class WellbeingSessionState:
@@ -19,3 +26,13 @@ class WellbeingSessionState:
     last_break_at: Optional[datetime] = None
     completed_breaks: int = 0
     postponed_breaks: int = 0
+
+
+@dataclass
+class BreakEvent:
+    session_id: int
+    user_id: int
+    event_type: BreakEventType
+    timestamp: Optional[datetime] = None
+    postpone_duration_minutes: Optional[int] = None
+    id: Optional[int] = None

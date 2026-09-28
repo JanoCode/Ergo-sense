@@ -842,7 +842,9 @@ class DashboardWidget(QWidget):
                     # Update break info
                     from wellbeing.models import CycleState
                     cycle = self.wellbeing_service.get_cycle_state()
-                    if cycle in (CycleState.BREAK_DUE, CycleState.BREAK_DUE_SOON):
+                    if cycle == CycleState.BREAKING:
+                        self.lbl_break_info.setText("Pausa en curso")
+                    elif cycle in (CycleState.BREAK_DUE, CycleState.BREAK_DUE_SOON):
                         self.lbl_break_info.setText("Es un buen momento para hacer una pausa.")
                     else:
                         time_until = self.wellbeing_service.get_time_until_next_break()

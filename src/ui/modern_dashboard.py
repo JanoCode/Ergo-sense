@@ -162,6 +162,68 @@ class ModernDashboardWidget(DashboardWidget):
         self.lbl_break_info.setVisible(False)
         content.addWidget(self.lbl_break_info)
 
+        # Break reminder card
+        self.break_reminder_card = self._card()
+        self.break_reminder_card.setStyleSheet(
+            "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #fff3e0, stop:1 #ffe0b2); border: 2px solid #e67e22;"
+            "border-radius: 12px; }"
+        )
+        reminder_layout = QVBoxLayout(self.break_reminder_card)
+        reminder_layout.setSpacing(8)
+        self.lbl_reminder_title = QLabel("Hora de hacer una pausa")
+        self.lbl_reminder_title.setStyleSheet(
+            "font-size: 18px; font-weight: bold; color: #e65100; border: none; background: transparent;"
+        )
+        self.lbl_reminder_title.setAlignment(Qt.AlignCenter)
+        self.lbl_reminder_body = QLabel("Llevas 50 minutos de uso continuo.")
+        self.lbl_reminder_body.setStyleSheet(
+            "font-size: 14px; color: #bf360c; border: none; background: transparent;"
+        )
+        self.lbl_reminder_body.setAlignment(Qt.AlignCenter)
+        reminder_layout.addWidget(self.lbl_reminder_title)
+        reminder_layout.addWidget(self.lbl_reminder_body)
+
+        reminder_actions = QHBoxLayout()
+        reminder_actions.addStretch()
+        self.btn_start_break = QPushButton("Iniciar pausa")
+        self.btn_start_break.setObjectName("primaryButton")
+        self.btn_start_break.setMinimumHeight(40)
+        self.btn_start_break.clicked.connect(self._on_start_break)
+        self.btn_postpone = QPushButton("Recordarme después")
+        self.btn_postpone.setObjectName("secondaryButton")
+        self.btn_postpone.setMinimumHeight(40)
+        self.btn_postpone.clicked.connect(self._on_postpone)
+        reminder_actions.addWidget(self.btn_start_break)
+        reminder_actions.addWidget(self.btn_postpone)
+        reminder_actions.addStretch()
+        reminder_layout.addLayout(reminder_actions)
+        self.break_reminder_card.setVisible(False)
+        content.addWidget(self.break_reminder_card)
+
+        # Breaking state card
+        self.breaking_card = self._card()
+        self.breaking_card.setStyleSheet(
+            "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #e8f5e9, stop:1 #c8e6c9); border: 2px solid #43a047;"
+            "border-radius: 12px; }"
+        )
+        breaking_layout = QVBoxLayout(self.breaking_card)
+        self.lbl_breaking_title = QLabel("Pausa en curso")
+        self.lbl_breaking_title.setStyleSheet(
+            "font-size: 18px; font-weight: bold; color: #2e7d32; border: none; background: transparent;"
+        )
+        self.lbl_breaking_title.setAlignment(Qt.AlignCenter)
+        self.lbl_breaking_since = QLabel("Desde: --:--:--")
+        self.lbl_breaking_since.setStyleSheet(
+            "font-size: 14px; color: #388e3c; border: none; background: transparent;"
+        )
+        self.lbl_breaking_since.setAlignment(Qt.AlignCenter)
+        breaking_layout.addWidget(self.lbl_breaking_title)
+        breaking_layout.addWidget(self.lbl_breaking_since)
+        self.breaking_card.setVisible(False)
+        content.addWidget(self.breaking_card)
+
         actions = QHBoxLayout()
         actions.addStretch()
         self.btn_start_session = QPushButton("Iniciar monitoreo")
@@ -638,6 +700,45 @@ class ModernDashboardWidget(DashboardWidget):
         super()._update_session_time()
         value = self.lbl_elapsed.text().replace("Sesión: ", "").replace("Transcurrido: ", "")
         self.lbl_monitor_time.setText(value)
+
+        if not self.wellbeing_service:
+            return
+
+        from wellbeing.models import CycleState
+        cycle = self.wellbeing_service.get_cycle_state()
+
+        if cycle == CycleState.BREAKING:
+            self.break_reminder_card.setVisible(False)
+            self.breaking_card.setVisible(True)
+            started = self.wellbeing_service.get_break_started_at()
+            if started:
+                self.lbl_breaking_since.setText(
+                    f"Desde: {started.strftime('%H:%M:%S')}"
+                )
+            self.lbl_break_info.setVisible(False)
+        elif cycle == CycleState.BREAK_DUE:
+            self.breaking_card.setVisible(False)
+            if self.wellbeing_service.is_reminder_active() or self.wellbeing_service.should_show_reminder():
+                state = self.wellbeing_service.get_state()
+                if state:
+                    mins = state.continuous_usage_seconds // 60
+                    self.lbl_reminder_body.setText(
+                        f"Llevas {mins} minutos de uso continuo."
+                    )
+                self.break_reminder_card.setVisible(True)
+            self.lbl_break_info.setVisible(False)
+        else:
+            self.break_reminder_card.setVisible(False)
+            self.breaking_card.setVisible(False)
+
+    def _on_start_break(self):
+        if self.wellbeing_service:
+            self.wellbeing_service.start_break()
+
+    def _on_postpone(self):
+        if self.wellbeing_service:
+            self.wellbeing_service.postpone()
+            self.break_reminder_card.setVisible(False)
 
     def _reset_fatigue_ui(self):
         super()._reset_fatigue_ui()

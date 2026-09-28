@@ -138,4 +138,22 @@ class DatabaseManager:
                 "ON fatigue_events(session_id, timestamp)"
             )
 
+            # Wellbeing break events
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS break_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    postpone_duration_minutes INTEGER,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_break_events_session "
+                "ON break_events(session_id, timestamp)"
+            )
+
             conn.commit()

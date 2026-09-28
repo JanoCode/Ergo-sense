@@ -2,7 +2,9 @@ from datetime import datetime, timedelta
 import pytest
 from unittest.mock import Mock, patch
 from wellbeing.service import WellbeingService
-from wellbeing.models import CycleState
+from wellbeing.models import BreakEventType, CycleState
+from wellbeing.repository import SQLiteBreakEventRepository
+from database.connection import DatabaseManager
 from sessions.models import Session
 from app import config
 
@@ -82,3 +84,108 @@ def test_service_works_without_advanced_fatigue(wellbeing_service, mock_session_
     with patch.object(wellbeing_service, '_get_current_time', return_value=current_time):
         state = wellbeing_service.get_state()
         assert state is not None
+
+
+def _due_service(mock_session_service, repository=None):
+    start_time = datetime(2026, 9, 28, 10, 0, 0)
+    mock_session_service.get_active_session.return_value = Session(
+        id=1, user_id=7, started_at=start_time
+    )
+    return WellbeingService(mock_session_service, repository), start_time
+
+
+def test_break_due_generates_one_logical_reminder(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    now = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=now):
+        assert service.should_show_reminder() is True
+        assert service.should_show_reminder() is False
+        assert service.is_reminder_active() is True
+
+
+def test_postpone_keeps_continuous_usage_and_moves_next_reminder(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    due_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=due_at):
+        service.should_show_reminder()
+        before = service.get_state().continuous_usage_seconds
+        service.postpone()
+
+    five_minutes_later = due_at + timedelta(minutes=5)
+    with patch.object(service, "_get_current_time", return_value=five_minutes_later):
+        assert service.get_state().continuous_usage_seconds == before + 5 * 60
+        assert service.get_time_until_next_break() == 5 * 60
+        assert service.get_cycle_state() == CycleState.BREAK_DUE_SOON
+
+    next_reminder = due_at + timedelta(minutes=config.POSTPONE_TIME_MINUTES)
+    with patch.object(service, "_get_current_time", return_value=next_reminder):
+        assert service.get_cycle_state() == CycleState.BREAK_DUE
+        assert service.should_show_reminder() is True
+
+
+def test_postpone_count_increases(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    first_due = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=first_due):
+        service.postpone()
+    second_due = first_due + timedelta(minutes=config.POSTPONE_TIME_MINUTES)
+    with patch.object(service, "_get_current_time", return_value=second_due):
+        service.postpone()
+        assert service.get_state().postponed_breaks == 2
+
+
+def test_start_break_sets_state_and_timestamp(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    now = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=now):
+        service.start_break()
+        assert service.get_cycle_state() == CycleState.BREAKING
+        assert service.get_break_started_at() == now
+        assert service.get_state().last_break_at == now
+
+
+def test_breaking_freezes_continuous_usage_and_has_no_reminders(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+        continuous_at_break = service.get_state().continuous_usage_seconds
+
+    later = break_at + timedelta(hours=1)
+    with patch.object(service, "_get_current_time", return_value=later):
+        state = service.get_state()
+        assert state.continuous_usage_seconds == continuous_at_break
+        assert state.session_elapsed_seconds == 110 * 60
+        assert service.should_show_reminder() is False
+        assert service.is_reminder_active() is False
+
+
+def test_break_events_are_persisted(tmp_path, mock_session_service):
+    db = DatabaseManager(str(tmp_path / "break-events.db"))
+    db.initialize_database()
+    with db.get_connection() as conn:
+        conn.execute("INSERT INTO users (id, name) VALUES (7, 'Ada')")
+        conn.execute(
+            "INSERT INTO sessions (id, user_id, started_at) VALUES (1, 7, ?)",
+            ("2026-09-28T10:00:00",),
+        )
+        conn.commit()
+
+    repository = SQLiteBreakEventRepository(db)
+    service, started_at = _due_service(mock_session_service, repository)
+    postponed_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=postponed_at):
+        service.postpone()
+    break_at = postponed_at + timedelta(minutes=config.POSTPONE_TIME_MINUTES)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+
+    events = repository.get_by_session(1)
+    assert [event.event_type for event in events] == [
+        BreakEventType.BREAK_POSTPONED,
+        BreakEventType.BREAK_STARTED,
+    ]
+    assert events[0].timestamp == postponed_at
+    assert events[0].postpone_duration_minutes == config.POSTPONE_TIME_MINUTES
+    assert events[1].timestamp == break_at
+    assert all(event.user_id == 7 for event in events)
