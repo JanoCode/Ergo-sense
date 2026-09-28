@@ -17,6 +17,7 @@ from fatigue.fatigue_engine import FatigueEngine
 from fatigue.models import FatigueMetrics, SessionFinalMetrics
 from fatigue.models import AnalyticsPeriod
 from monitoring.monitoring_worker import MonitoringWorker
+from app import config
 
 logger = logging.getLogger(__name__)
 
@@ -518,7 +519,7 @@ class DashboardWidget(QWidget):
                 )
                 return
             self.user_service.set_active_user(user)
-            if self.baseline_service:
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.baseline_service:
                 self.baseline_service.start_for_user(user.id)
                 self._update_baseline_label()
             self._update_active_user_display()
@@ -537,7 +538,8 @@ class DashboardWidget(QWidget):
             
         self._update_session_ui_state()
         self._load_history()
-        self._update_longitudinal_analytics()
+        if config.ENABLE_ADVANCED_FATIGUE_MONITORING:
+            self._update_longitudinal_analytics()
 
     def _load_history(self):
         while self.history_list_layout.count() > 1:
@@ -660,32 +662,34 @@ class DashboardWidget(QWidget):
         try:
             self.session_service.start_session()
             current_session_start = time.time()
-            self.blink_detector.reset()
-            self.perclos_calc.reset()
-            self.prolonged_detector.reset()
-            self.yawn_detector.reset(session_start=current_session_start)
-            self.head_pose_estimator.reset()
-            self._last_baseline_rate_sample = current_session_start
-            self._session_started_timestamp = current_session_start
-            self._last_assessment_closures = 0
-            self._last_assessment_yawns = 0
-            self._assessment_sustained_down = False
-            self._assessment_sustained_deviation = False
-            self._assessment_max_pitch_deviation = 0.0
-            self._session_max_head_deviation = 0.0
-            self.fatigue_engine.reset(current_session_start)
-            self.current_assessment = None
-            self._reset_fatigue_ui()
-
-            # Iniciar baseline para el usuario activo
-            active_user = self.user_service.get_active_user() if self.user_service else None
-            if self.baseline_service and active_user:
-                self.baseline_service.start_for_user(active_user.id)
-                self._update_baseline_label()
+            
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING:
+                self.blink_detector.reset()
+                self.perclos_calc.reset()
+                self.prolonged_detector.reset()
+                self.yawn_detector.reset(session_start=current_session_start)
+                self.head_pose_estimator.reset()
+                self._last_baseline_rate_sample = current_session_start
+                self._session_started_timestamp = current_session_start
+                self._last_assessment_closures = 0
+                self._last_assessment_yawns = 0
+                self._assessment_sustained_down = False
+                self._assessment_sustained_deviation = False
+                self._assessment_max_pitch_deviation = 0.0
+                self._session_max_head_deviation = 0.0
+                self.fatigue_engine.reset(current_session_start)
+                self.current_assessment = None
+                self._reset_fatigue_ui()
+    
+                # Iniciar baseline para el usuario activo
+                active_user = self.user_service.get_active_user() if self.user_service else None
+                if self.baseline_service and active_user:
+                    self.baseline_service.start_for_user(active_user.id)
+                    self._update_baseline_label()
 
             self.timer.start(1000)
             
-            if self.camera_service:
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.camera_service:
                 self.lbl_video.setText("Iniciando cámara...")
                 self.lbl_video.setVisible(True)
                 self.metrics_container.setVisible(True)
@@ -700,21 +704,21 @@ class DashboardWidget(QWidget):
             return
         try:
             current_time = time.time()
-            if self.camera_service:
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.camera_service:
                 self._stop_monitoring_worker()
-            blink_metrics = self.blink_detector.get_metrics(current_time)
+            blink_metrics = self.blink_detector.get_metrics(current_time) if config.ENABLE_ADVANCED_FATIGUE_MONITORING else None
             ended_session = self.session_service.end_session()
             self.timer.stop()
             
-            if self.camera_service:
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.camera_service:
                 self.lbl_video.setVisible(False)
                 self.lbl_video.setText("Cámara inactiva")
                 self.metrics_container.setVisible(False)
 
-            if self.baseline_service:
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.baseline_service:
                 self.baseline_service.finish()
 
-            if self.fatigue_history_service and ended_session.id is not None:
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.fatigue_history_service and ended_session.id is not None:
                 self.fatigue_history_service.record_metric_events(
                     ended_session.id,
                     ended_session.user_id,
@@ -761,7 +765,8 @@ class DashboardWidget(QWidget):
                 
             self._update_session_ui_state()
             self._load_history()
-            self._update_longitudinal_analytics()
+            if config.ENABLE_ADVANCED_FATIGUE_MONITORING:
+                self._update_longitudinal_analytics()
         except Exception as e:
             QMessageBox.warning(self, "Error al finalizar", str(e))
             
@@ -784,6 +789,22 @@ class DashboardWidget(QWidget):
             self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 16px; border: none;")
             self.lbl_elapsed.setText("Transcurrido: 00:00:00")
             self.lbl_elapsed.setVisible(False)
+            
+        from app import config
+        if not config.ENABLE_ADVANCED_FATIGUE_MONITORING:
+            for widget in (
+                self.lbl_fatigue_score, self.lbl_fatigue_level,
+                self.lbl_fatigue_confidence, self.lbl_fatigue_signals,
+                self.lbl_baseline_status
+            ):
+                widget.setVisible(False)
+        else:
+            for widget in (
+                self.lbl_fatigue_score, self.lbl_fatigue_level,
+                self.lbl_fatigue_confidence, self.lbl_fatigue_signals,
+                self.lbl_baseline_status
+            ):
+                widget.setVisible(True)
 
     def _update_session_time(self):
         if not self.session_service: return

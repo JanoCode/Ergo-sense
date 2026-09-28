@@ -473,14 +473,56 @@ class ModernDashboardWidget(DashboardWidget):
         self.monitoring_empty.setVisible(not active)
         self.monitoring_content.setVisible(active)
         self.btn_monitor_end.setVisible(active)
+        
+        from app import config
+        if not config.ENABLE_ADVANCED_FATIGUE_MONITORING:
+            self.home_fatigue_card.setVisible(False)
+            self.monitor_video_card.setVisible(False)
+            
+            for widget in (
+                self.lbl_fatigue_score, self.lbl_fatigue_level,
+                self.lbl_fatigue_confidence, self.lbl_current_state,
+                self.monitor_score_bar, self.lbl_recommendation,
+                self.lbl_reasons, self.lbl_metric_context,
+                self.landmarks_toggle, self.lbl_yawn_feedback
+            ):
+                widget.setVisible(False)
+                
+            for widget in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev):
+                widget.setVisible(False)
+                
+            self.advanced_toggle.setVisible(False)
+            self.metrics_container.setVisible(False)
+            
+            # Update title in monitoring view to reflect simple session
+            if hasattr(self, 'monitor_score_card'):
+                # The title "Fatiga actual" is the first child of score_layout. We could hide it but it's hard to find easily, so we just let it be or find it.
+                pass
+        else:
+            self.home_fatigue_card.setVisible(True)
+            self.monitor_video_card.setVisible(True)
+            for widget in (
+                self.lbl_fatigue_score, self.lbl_fatigue_level,
+                self.lbl_fatigue_confidence, self.lbl_current_state,
+                self.monitor_score_bar, self.lbl_recommendation,
+                self.lbl_reasons, self.landmarks_toggle, self.lbl_yawn_feedback
+            ):
+                widget.setVisible(True)
+            for widget in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev):
+                widget.setVisible(True)
+            self.advanced_toggle.setVisible(True)
+
         if active:
-            baseline_state = (
-                self.baseline_service.get_state() if self.baseline_service else None
-            )
-            if baseline_state and baseline_state.value != "READY":
-                self.lbl_status.setText("Calibrando · monitoreo activo")
+            if not config.ENABLE_ADVANCED_FATIGUE_MONITORING:
+                self.lbl_status.setText("Sesión de bienestar activa")
             else:
-                self.lbl_status.setText("Monitoreando")
+                baseline_state = (
+                    self.baseline_service.get_state() if self.baseline_service else None
+                )
+                if baseline_state and baseline_state.value != "READY":
+                    self.lbl_status.setText("Calibrando · monitoreo activo")
+                else:
+                    self.lbl_status.setText("Monitoreando")
         else:
             self.lbl_status.setText("Sin sesión")
 
