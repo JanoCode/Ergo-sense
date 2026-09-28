@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import pytest
 from unittest.mock import Mock, patch
 from wellbeing.service import WellbeingService
-from wellbeing.models import BreakEventType, CycleState
+from wellbeing.models import BreakCompletionType, BreakEventType, CycleState
 from wellbeing.repository import SQLiteBreakEventRepository
 from database.connection import DatabaseManager
 from sessions.models import Session
@@ -151,11 +151,11 @@ def test_breaking_freezes_continuous_usage_and_has_no_reminders(mock_session_ser
         service.start_break()
         continuous_at_break = service.get_state().continuous_usage_seconds
 
-    later = break_at + timedelta(hours=1)
+    later = break_at + timedelta(minutes=1)
     with patch.object(service, "_get_current_time", return_value=later):
         state = service.get_state()
         assert state.continuous_usage_seconds == continuous_at_break
-        assert state.session_elapsed_seconds == 110 * 60
+        assert state.session_elapsed_seconds == 51 * 60
         assert service.should_show_reminder() is False
         assert service.is_reminder_active() is False
 
@@ -189,3 +189,117 @@ def test_break_events_are_persisted(tmp_path, mock_session_service):
     assert events[0].postpone_duration_minutes == config.POSTPONE_TIME_MINUTES
     assert events[1].timestamp == break_at
     assert all(event.user_id == 7 for event in events)
+
+
+def test_break_timer_uses_timestamps(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+        assert service.get_break_elapsed_seconds() == 0
+        assert service.get_break_remaining_seconds() == 5 * 60
+
+    later = break_at + timedelta(seconds=32)
+    with patch.object(service, "_get_current_time", return_value=later):
+        assert service.get_break_elapsed_seconds() == 32
+        assert service.get_break_remaining_seconds() == 4 * 60 + 28
+
+
+def test_break_finishes_automatically_and_schedules_next_reminder(
+    mock_session_service,
+):
+    service, started_at = _due_service(mock_session_service)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+
+    completed_at = break_at + timedelta(minutes=5)
+    with patch.object(service, "_get_current_time", return_value=completed_at):
+        assert service.get_cycle_state() == CycleState.WORKING
+        state = service.get_state()
+        assert state.continuous_usage_seconds == 0
+        assert state.continuous_usage_started_at == completed_at
+        assert state.completed_breaks == 1
+        assert service.get_time_until_next_break() == 50 * 60
+
+    next_due = completed_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=next_due):
+        assert service.get_cycle_state() == CycleState.BREAK_DUE
+
+
+def test_break_finishes_manually_with_real_duration(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+
+    completed_at = break_at + timedelta(seconds=73)
+    with patch.object(service, "_get_current_time", return_value=completed_at):
+        completed = service.complete_break()
+        assert completed.duration_seconds == 73
+        assert completed.completion_type == BreakCompletionType.MANUAL
+        assert service.get_cycle_state() == CycleState.WORKING
+        assert service.get_state().continuous_usage_seconds == 0
+
+
+def test_cannot_start_more_than_one_active_break(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+        original_started_at = service.get_break_started_at()
+        service.start_break()
+        assert service.get_break_started_at() == original_started_at
+        assert service.get_cycle_state() == CycleState.BREAKING
+
+
+def test_completing_nonexistent_break_is_harmless(mock_session_service):
+    service, started_at = _due_service(mock_session_service)
+    with patch.object(service, "_get_current_time", return_value=started_at):
+        assert service.complete_break() is None
+        assert service.get_cycle_state() == CycleState.WORKING
+
+
+def test_session_end_closes_active_break(mock_session_service):
+    callbacks = []
+    mock_session_service.add_before_end_callback.side_effect = callbacks.append
+    service, started_at = _due_service(mock_session_service)
+    # Re-register because the fixture service is created after the side effect.
+    service = WellbeingService(mock_session_service)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+    ended_at = break_at + timedelta(seconds=20)
+    with patch.object(service, "_get_current_time", return_value=ended_at):
+        callbacks[-1]()
+        assert service.get_cycle_state() == CycleState.WORKING
+        assert service.get_state().continuous_usage_seconds == 0
+
+
+def test_completed_break_persistence(tmp_path, mock_session_service):
+    db = DatabaseManager(str(tmp_path / "completed-break.db"))
+    db.initialize_database()
+    with db.get_connection() as conn:
+        conn.execute("INSERT INTO users (id, name) VALUES (7, 'Ada')")
+        conn.execute(
+            "INSERT INTO sessions (id, user_id, started_at) VALUES (1, 7, ?)",
+            ("2026-09-28T10:00:00",),
+        )
+        conn.commit()
+
+    repository = SQLiteBreakEventRepository(db)
+    service, started_at = _due_service(mock_session_service, repository)
+    break_at = started_at + timedelta(minutes=50)
+    with patch.object(service, "_get_current_time", return_value=break_at):
+        service.start_break()
+    completed_at = break_at + timedelta(seconds=84)
+    with patch.object(service, "_get_current_time", return_value=completed_at):
+        service.complete_break()
+
+    saved = repository.get_breaks_by_session(1)
+    assert len(saved) == 1
+    assert saved[0].started_at == break_at
+    assert saved[0].ended_at == completed_at
+    assert saved[0].duration_seconds == 84
+    assert saved[0].completion_type == BreakCompletionType.MANUAL
+    assert repository.get_active_break(1) is None

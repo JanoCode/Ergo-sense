@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Callable, Optional, List
 from datetime import datetime
 from sessions.models import Session
 from users.service import UserService
@@ -8,6 +8,10 @@ class SessionService:
         self.session_repository = session_repository
         self.user_service = user_service
         self._active_session: Optional[Session] = None
+        self._before_end_callbacks: List[Callable[[], None]] = []
+
+    def add_before_end_callback(self, callback: Callable[[], None]) -> None:
+        self._before_end_callbacks.append(callback)
 
     def start_session(self) -> Session:
         if self._active_session is not None:
@@ -24,6 +28,9 @@ class SessionService:
     def end_session(self) -> Session:
         if not self._active_session:
             raise ValueError("No hay sesión activa para finalizar.")
+
+        for callback in tuple(self._before_end_callbacks):
+            callback()
             
         session = self._active_session
         session.ended_at = datetime.now()

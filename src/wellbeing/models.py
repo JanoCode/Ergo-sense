@@ -16,6 +16,11 @@ class BreakEventType(Enum):
     BREAK_POSTPONED = "BREAK_POSTPONED"
 
 
+class BreakCompletionType(Enum):
+    AUTOMATIC = "AUTOMATIC"
+    MANUAL = "MANUAL"
+
+
 @dataclass
 class WellbeingSessionState:
     session_id: int
@@ -35,4 +40,15 @@ class BreakEvent:
     event_type: BreakEventType
     timestamp: Optional[datetime] = None
     postpone_duration_minutes: Optional[int] = None
+    id: Optional[int] = None
+
+
+@dataclass
+class WellbeingBreak:
+    session_id: int
+    user_id: int
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    completion_type: Optional[BreakCompletionType] = None
     id: Optional[int] = None

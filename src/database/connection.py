@@ -156,4 +156,26 @@ class DatabaseManager:
                 "ON break_events(session_id, timestamp)"
             )
 
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS wellbeing_breaks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    duration_seconds INTEGER,
+                    completion_type TEXT,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_wellbeing_breaks_session "
+                "ON wellbeing_breaks(session_id, started_at)"
+            )
+            cursor.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_wellbeing_breaks_active "
+                "ON wellbeing_breaks(session_id) WHERE ended_at IS NULL"
+            )
+
             conn.commit()

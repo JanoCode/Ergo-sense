@@ -1,7 +1,14 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from wellbeing.models import WellbeingSessionState, CycleState, BreakEvent, BreakEventType
+from wellbeing.models import (
+    BreakCompletionType,
+    BreakEvent,
+    BreakEventType,
+    CycleState,
+    WellbeingBreak,
+    WellbeingSessionState,
+)
 from sessions.service import SessionService
 from app import config
 
@@ -15,6 +22,13 @@ class WellbeingService:
         self._break_started_at: Optional[datetime] = None
         self._reminder_shown: bool = False
         self._next_reminder_at: Optional[datetime] = None
+        self._active_break: Optional[WellbeingBreak] = None
+        self._last_break_completed_at: Optional[datetime] = None
+        register_callback = getattr(
+            self.session_service, "add_before_end_callback", None
+        )
+        if callable(register_callback):
+            register_callback(self.end_active_break)
 
     def get_state(self) -> Optional[WellbeingSessionState]:
         self._update_state()
@@ -39,6 +53,14 @@ class WellbeingService:
             self._break_started_at = None
             self._reminder_shown = False
             self._next_reminder_at = None
+            self._active_break = (
+                self.break_repository.get_active_break(active_session.id)
+                if self.break_repository else None
+            )
+            if self._active_break:
+                self._is_breaking = True
+                self._break_started_at = self._active_break.started_at
+                self._state.last_break_at = self._active_break.started_at
 
         # Update elapsed times
         self._state.session_elapsed_seconds = int(
@@ -48,6 +70,8 @@ class WellbeingService:
             self._state.continuous_usage_seconds = int(
                 (now - self._state.continuous_usage_started_at).total_seconds()
             )
+        elif self.get_break_remaining_seconds(now) == 0:
+            self._finish_break(now, BreakCompletionType.AUTOMATIC)
 
     def get_cycle_state(self) -> CycleState:
         self._update_state()
@@ -148,9 +172,17 @@ class WellbeingService:
         self._reminder_shown = False
         self._next_reminder_at = None
 
-        if self.break_repository:
-            active_session = self.session_service.get_active_session()
-            if active_session:
+        active_session = self.session_service.get_active_session()
+        if active_session:
+            self._active_break = WellbeingBreak(
+                session_id=active_session.id,
+                user_id=active_session.user_id,
+                started_at=now,
+            )
+            if self.break_repository:
+                self._active_break = self.break_repository.start_break(
+                    self._active_break
+                )
                 self.break_repository.save(
                     BreakEvent(
                         session_id=active_session.id,
@@ -162,6 +194,70 @@ class WellbeingService:
 
     def get_break_started_at(self) -> Optional[datetime]:
         return self._break_started_at
+
+    def get_break_elapsed_seconds(self, now: Optional[datetime] = None) -> int:
+        if not self._is_breaking or not self._break_started_at:
+            return 0
+        current = now or self._get_current_time()
+        return max(0, int((current - self._break_started_at).total_seconds()))
+
+    def get_break_remaining_seconds(self, now: Optional[datetime] = None) -> int:
+        duration = config.SUGGESTED_BREAK_DURATION_MINUTES * 60
+        return max(0, duration - self.get_break_elapsed_seconds(now))
+
+    def complete_break(self) -> Optional[WellbeingBreak]:
+        """Complete an active break manually; harmless when none is active."""
+        self._update_state()
+        if not self._is_breaking:
+            return None
+        return self._finish_break(
+            self._get_current_time(), BreakCompletionType.MANUAL
+        )
+
+    def end_active_break(self) -> Optional[WellbeingBreak]:
+        """Close a break before its session is ended or the app exits."""
+        return self.complete_break()
+
+    def get_last_break_completed_at(self) -> Optional[datetime]:
+        return self._last_break_completed_at
+
+    def was_break_completed_recently(self, seconds: int = 5) -> bool:
+        if not self._last_break_completed_at:
+            return False
+        age = (
+            self._get_current_time() - self._last_break_completed_at
+        ).total_seconds()
+        return 0 <= age < seconds
+
+    def _finish_break(
+        self, ended_at: datetime, completion_type: BreakCompletionType
+    ) -> Optional[WellbeingBreak]:
+        if not self._is_breaking or not self._break_started_at or not self._state:
+            return None
+
+        completed = self._active_break or WellbeingBreak(
+            session_id=self._state.session_id,
+            user_id=self.session_service.get_active_session().user_id,
+            started_at=self._break_started_at,
+        )
+        completed.ended_at = ended_at
+        completed.duration_seconds = max(
+            0, int((ended_at - completed.started_at).total_seconds())
+        )
+        completed.completion_type = completion_type
+        if self.break_repository and completed.id is not None:
+            self.break_repository.complete_break(completed)
+
+        self._is_breaking = False
+        self._break_started_at = None
+        self._active_break = None
+        self._state.completed_breaks += 1
+        self._state.continuous_usage_started_at = ended_at
+        self._state.continuous_usage_seconds = 0
+        self._reminder_shown = False
+        self._next_reminder_at = None
+        self._last_break_completed_at = ended_at
+        return completed
 
     def _get_current_time(self) -> datetime:
         """Wrapper around datetime.now() to allow mocking in tests."""

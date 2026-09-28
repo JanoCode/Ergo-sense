@@ -219,10 +219,30 @@ class ModernDashboardWidget(DashboardWidget):
             "font-size: 14px; color: #388e3c; border: none; background: transparent;"
         )
         self.lbl_breaking_since.setAlignment(Qt.AlignCenter)
+        self.lbl_break_timer = QLabel("05:00 restantes · 00:00 transcurridos")
+        self.lbl_break_timer.setStyleSheet(
+            "font-size: 16px; font-weight: bold; color: #2e7d32; "
+            "border: none; background: transparent;"
+        )
+        self.lbl_break_timer.setAlignment(Qt.AlignCenter)
+        self.btn_finish_break = QPushButton("Finalizar pausa")
+        self.btn_finish_break.setObjectName("secondaryButton")
+        self.btn_finish_break.setMinimumHeight(40)
+        self.btn_finish_break.clicked.connect(self._on_finish_break)
         breaking_layout.addWidget(self.lbl_breaking_title)
         breaking_layout.addWidget(self.lbl_breaking_since)
+        breaking_layout.addWidget(self.lbl_break_timer)
+        breaking_layout.addWidget(self.btn_finish_break, alignment=Qt.AlignCenter)
         self.breaking_card.setVisible(False)
         content.addWidget(self.breaking_card)
+
+        self.lbl_break_completed = QLabel("Pausa completada")
+        self.lbl_break_completed.setAlignment(Qt.AlignCenter)
+        self.lbl_break_completed.setStyleSheet(
+            "font-size: 16px; font-weight: bold; color: #2e7d32;"
+        )
+        self.lbl_break_completed.setVisible(False)
+        content.addWidget(self.lbl_break_completed)
 
         actions = QHBoxLayout()
         actions.addStretch()
@@ -715,6 +735,13 @@ class ModernDashboardWidget(DashboardWidget):
                 self.lbl_breaking_since.setText(
                     f"Desde: {started.strftime('%H:%M:%S')}"
                 )
+            remaining = self.wellbeing_service.get_break_remaining_seconds()
+            elapsed = self.wellbeing_service.get_break_elapsed_seconds()
+            self.lbl_break_timer.setText(
+                f"{remaining // 60:02d}:{remaining % 60:02d} restantes · "
+                f"{elapsed // 60:02d}:{elapsed % 60:02d} transcurridos"
+            )
+            self.lbl_break_completed.setVisible(False)
             self.lbl_break_info.setVisible(False)
         elif cycle == CycleState.BREAK_DUE:
             self.breaking_card.setVisible(False)
@@ -730,6 +757,9 @@ class ModernDashboardWidget(DashboardWidget):
         else:
             self.break_reminder_card.setVisible(False)
             self.breaking_card.setVisible(False)
+            self.lbl_break_completed.setVisible(
+                self.wellbeing_service.was_break_completed_recently()
+            )
 
     def _on_start_break(self):
         if self.wellbeing_service:
@@ -739,6 +769,10 @@ class ModernDashboardWidget(DashboardWidget):
         if self.wellbeing_service:
             self.wellbeing_service.postpone()
             self.break_reminder_card.setVisible(False)
+
+    def _on_finish_break(self):
+        if self.wellbeing_service:
+            self.wellbeing_service.complete_break()
 
     def _reset_fatigue_ui(self):
         super()._reset_fatigue_ui()

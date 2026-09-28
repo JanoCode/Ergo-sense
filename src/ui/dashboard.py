@@ -716,6 +716,8 @@ class DashboardWidget(QWidget):
         if not self.session_service:
             return
         try:
+            if self.wellbeing_service:
+                self.wellbeing_service.end_active_break()
             current_time = time.time()
             if config.ENABLE_ADVANCED_FATIGUE_MONITORING and self.camera_service:
                 self._stop_monitoring_worker()
