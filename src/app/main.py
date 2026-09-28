@@ -24,6 +24,7 @@ from fatigue.analytics import (
 from wellbeing.service import WellbeingService
 from wellbeing.repository import SQLiteBreakEventRepository
 from wellbeing.recommendations import WellbeingRecommendationService
+from wellbeing.analytics import WellbeingAnalyticsService
 
 def main():
     logging.basicConfig(
@@ -54,6 +55,9 @@ def main():
     break_event_repo = SQLiteBreakEventRepository(db_manager)
     wellbeing_service = WellbeingService(session_service, break_event_repo)
     recommendation_service = WellbeingRecommendationService()
+    wellbeing_analytics_service = WellbeingAnalyticsService(
+        session_service, break_event_repo
+    )
 
     app = QApplication(sys.path)
     
@@ -65,6 +69,7 @@ def main():
         baseline_service, fatigue_history_service, fatigue_analytics_service,
         wellbeing_service,
         recommendation_service,
+        wellbeing_analytics_service,
     )
     app.aboutToQuit.connect(window.dashboard.shutdown)
     window.show()

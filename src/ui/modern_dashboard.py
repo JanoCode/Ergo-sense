@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
@@ -455,6 +457,30 @@ class ModernDashboardWidget(DashboardWidget):
         page, layout = self._page(
             "Historial", "Revisa tus sesiones y hábitos de descanso"
         )
+        overview = QGridLayout()
+        overview.setSpacing(12)
+        self.lbl_week_sessions = self._metric("Sesiones últimos 7 días", "0")
+        self.lbl_week_usage = self._metric("Tiempo total de uso", "00:00:00")
+        self.lbl_week_breaks = self._metric("Pausas realizadas", "0")
+        self.lbl_week_continuous = self._metric(
+            "Promedio antes de una pausa", "Sin datos"
+        )
+        for index, widget in enumerate(
+            (
+                self.lbl_week_sessions, self.lbl_week_usage,
+                self.lbl_week_breaks, self.lbl_week_continuous,
+            )
+        ):
+            overview.addWidget(widget, index // 2, index % 2)
+        layout.addLayout(overview)
+
+        self.lbl_period_summary = QLabel(
+            "Selecciona un usuario para consultar sus estadísticas."
+        )
+        self.lbl_period_summary.setWordWrap(True)
+        self.lbl_period_summary.setObjectName("mutedText")
+        layout.addWidget(self.lbl_period_summary)
+
         content = QHBoxLayout()
         content.setSpacing(16)
         self.history_container = QScrollArea()
@@ -482,6 +508,15 @@ class ModernDashboardWidget(DashboardWidget):
         detail_layout.addStretch()
         content.addWidget(detail, 2)
         layout.addLayout(content)
+
+        charts = QGridLayout()
+        self.history_charts_layout = charts
+        charts.setSpacing(14)
+        self.chart_daily_usage = self._create_chart_view()
+        self.chart_daily_breaks = self._create_chart_view()
+        charts.addWidget(self.chart_daily_usage, 0, 0)
+        charts.addWidget(self.chart_daily_breaks, 0, 1)
+        layout.addLayout(charts)
         return page
 
     def _build_trends(self):
@@ -672,6 +707,64 @@ class ModernDashboardWidget(DashboardWidget):
         self.lbl_home_user.setText(f"Hola, {user.name}" if user else "Hola")
         self._update_session_ui_state()
 
+    def _load_history(self):
+        super()._load_history()
+        user = self.user_service.get_active_user() if self.user_service else None
+        analytics = self.wellbeing_analytics_service
+        if not user or not analytics:
+            self.lbl_week_sessions.setText("0")
+            self.lbl_week_usage.setText("00:00:00")
+            self.lbl_week_breaks.setText("0")
+            self.lbl_week_continuous.setText("Sin datos")
+            self.lbl_period_summary.setText(
+                "Selecciona un usuario para consultar sus estadísticas."
+            )
+            self._set_line_chart(
+                self.chart_daily_usage, "Tiempo de uso por día", [], "Horas"
+            )
+            self._set_line_chart(
+                self.chart_daily_breaks, "Pausas por día", [], "Pausas"
+            )
+            return
+
+        week = analytics.period_stats(user.id, 7)
+        month = analytics.period_stats(user.id, 30)
+        self.lbl_week_sessions.setText(str(week.session_count))
+        self.lbl_week_usage.setText(self._duration_text(week.total_usage_seconds))
+        self.lbl_week_breaks.setText(str(week.completed_breaks))
+        self.lbl_week_continuous.setText(
+            self._duration_text(week.average_continuous_before_break_seconds)
+            if week.average_continuous_before_break_seconds else "Sin datos"
+        )
+        self.lbl_period_summary.setText(
+            f"Últimos 30 días: {month.session_count} sesiones · "
+            f"{self._duration_text(month.total_usage_seconds)} de uso · "
+            f"{self._duration_text(month.total_break_seconds)} en pausas · "
+            f"{month.total_postponed_breaks} posposiciones.\n"
+            f"{analytics.compare_weekly_breaks(user.id)}"
+        )
+        daily = analytics.daily_stats(user.id, 7)
+        usage_points = [
+            (datetime.combine(day, datetime.min.time()), seconds / 3600)
+            for day, seconds, _ in daily
+        ]
+        break_points = [
+            (datetime.combine(day, datetime.min.time()), count)
+            for day, _, count in daily
+        ]
+        self._set_line_chart(
+            self.chart_daily_usage,
+            "Tiempo de uso por día",
+            usage_points,
+            "Horas",
+        )
+        self._set_line_chart(
+            self.chart_daily_breaks,
+            "Pausas realizadas por día",
+            break_points,
+            "Pausas",
+        )
+
     def _update_baseline_label(self):
         self.lbl_baseline_status.setText("")
 
@@ -722,6 +815,8 @@ class ModernDashboardWidget(DashboardWidget):
                     widget, index // 2, index % 2
                 )
             self.history_content_layout.setDirection(QHBoxLayout.TopToBottom)
+            self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
+            self.history_charts_layout.addWidget(self.chart_daily_breaks, 1, 0)
             for index, widget in enumerate(
                 (
                     self.lbl_analytics_score,
@@ -746,6 +841,8 @@ class ModernDashboardWidget(DashboardWidget):
             ):
                 self.monitor_summary_layout.addWidget(widget, 0, index)
             self.history_content_layout.setDirection(QHBoxLayout.LeftToRight)
+            self.history_charts_layout.addWidget(self.chart_daily_usage, 0, 0)
+            self.history_charts_layout.addWidget(self.chart_daily_breaks, 0, 1)
             for index, widget in enumerate(
                 (
                     self.lbl_analytics_score,
@@ -1012,14 +1109,17 @@ class ModernDashboardWidget(DashboardWidget):
             minutes, seconds = divmod(remainder, 60)
             duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         summary = (
-            self.wellbeing_service.get_session_summary(session)
-            if self.wellbeing_service else None
+            self.wellbeing_analytics_service.session_summary(session)
+            if self.wellbeing_analytics_service else None
         )
-        pauses = summary["completed_breaks"] if summary else 0
-        postponed = summary["postponed_breaks"] if summary else 0
+        pauses = summary.completed_breaks if summary else 0
+        max_continuous = (
+            self._duration_text(summary.max_continuous_usage_seconds)
+            if summary and summary.has_break_data else "Sin datos de pausas"
+        )
         subtitle = QLabel(
             f"Duración: {duration}   ·   Pausas: {pauses}   ·   "
-            f"Pospuestas: {postponed}"
+            f"Uso continuo máximo: {max_continuous}"
         )
         subtitle.setObjectName("mutedText")
         subtitle.setWordWrap(True)
@@ -1033,36 +1133,57 @@ class ModernDashboardWidget(DashboardWidget):
         return widget
 
     def _show_session_detail(self, session):
-        def duration(value):
-            if value is None:
-                return "---"
-            hours, remainder = divmod(int(value), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
         summary = (
-            self.wellbeing_service.get_session_summary(session)
-            if self.wellbeing_service else None
-        ) or {
-            "completed_breaks": 0,
-            "postponed_breaks": 0,
-            "total_break_seconds": 0,
-            "max_continuous_usage_seconds": session.duration_seconds or 0,
-        }
+            self.wellbeing_analytics_service.session_summary(session)
+            if self.wellbeing_analytics_service else None
+        )
         date = (
             session.started_at.strftime("%d/%m/%Y %H:%M")
             if session.started_at else "---"
         )
+        ended = (
+            session.ended_at.strftime("%H:%M:%S")
+            if session.ended_at else "En curso"
+        )
+        if not summary or not summary.has_break_data:
+            break_detail = "Sin datos de pausas"
+            completed = postponed = 0
+            total_break = average_break = max_continuous = "---"
+            work = self._duration_text(session.duration_seconds or 0)
+        else:
+            completed = summary.completed_breaks
+            postponed = summary.postponed_breaks
+            total_break = self._duration_text(summary.break_seconds)
+            average_break = self._duration_text(summary.average_break_seconds)
+            max_continuous = self._duration_text(
+                summary.max_continuous_usage_seconds
+            )
+            work = self._duration_text(summary.work_seconds)
+            break_detail = "\n".join(
+                f"  Pausa {index}: {self._duration_text(seconds)}"
+                for index, seconds in enumerate(
+                    summary.break_durations_seconds, start=1
+                )
+            ) or "Sin pausas completadas"
         self.lbl_session_detail.setText(
             f"Fecha: {date}\n"
-            f"Duración de sesión: {duration(session.duration_seconds)}\n"
-            f"Pausas realizadas: {summary['completed_breaks']}\n"
-            f"Pausas pospuestas: {summary['postponed_breaks']}\n"
-            f"Mayor tramo de uso continuo: "
-            f"{duration(summary['max_continuous_usage_seconds'])}\n"
-            f"Tiempo total de pausas: "
-            f"{duration(summary['total_break_seconds'])}"
+            f"Hora de término: {ended}\n"
+            f"Duración total: {self._duration_text(session.duration_seconds or 0)}\n"
+            f"Tiempo de trabajo: {work}\n"
+            f"Tiempo total en pausa: {total_break}\n"
+            f"Pausas realizadas: {completed}\n"
+            f"Pausas pospuestas: {postponed}\n"
+            f"Mayor período de uso continuo: {max_continuous}\n"
+            f"Duración promedio de pausa: {average_break}\n"
+            f"Detalle de pausas:\n{break_detail}"
         )
+
+    @staticmethod
+    def _duration_text(value):
+        seconds = max(0, int(value or 0))
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     @staticmethod
     def _page(title, subtitle):

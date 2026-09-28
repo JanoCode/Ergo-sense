@@ -25,7 +25,8 @@ class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
                  face_analyzer=None, baseline_service=None,
                  fatigue_history_service=None, fatigue_analytics_service=None,
-                 wellbeing_service=None, recommendation_service=None):
+                 wellbeing_service=None, recommendation_service=None,
+                 wellbeing_analytics_service=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
@@ -37,6 +38,7 @@ class DashboardWidget(QWidget):
         self.fatigue_analytics_service = fatigue_analytics_service
         self.wellbeing_service = wellbeing_service
         self.recommendation_service = recommendation_service
+        self.wellbeing_analytics_service = wellbeing_analytics_service
         self._recommendation_break_key = None
         self._reminder_recommendation_visible = False
         self.blink_detector = BlinkDetector()
