@@ -221,6 +221,44 @@ class WellbeingService:
     def get_last_break_completed_at(self) -> Optional[datetime]:
         return self._last_break_completed_at
 
+    def get_session_summary(self, session) -> dict:
+        """Return simple break habits for a persisted session."""
+        if not self.break_repository or session.id is None:
+            return {
+                "completed_breaks": 0,
+                "postponed_breaks": 0,
+                "total_break_seconds": 0,
+                "max_continuous_usage_seconds": session.duration_seconds or 0,
+            }
+
+        breaks = self.break_repository.get_breaks_by_session(session.id)
+        events = self.break_repository.get_by_session(session.id)
+        completed = [item for item in breaks if item.ended_at is not None]
+        postponed = sum(
+            1 for event in events
+            if event.event_type == BreakEventType.BREAK_POSTPONED
+        )
+        total_break = sum(item.duration_seconds or 0 for item in completed)
+
+        cursor = session.started_at
+        longest = 0
+        for item in completed:
+            if cursor and item.started_at:
+                longest = max(
+                    longest, int((item.started_at - cursor).total_seconds())
+                )
+            cursor = item.ended_at
+        session_end = session.ended_at or self._get_current_time()
+        if cursor and session_end:
+            longest = max(longest, int((session_end - cursor).total_seconds()))
+
+        return {
+            "completed_breaks": len(completed),
+            "postponed_breaks": postponed,
+            "total_break_seconds": total_break,
+            "max_continuous_usage_seconds": max(0, longest),
+        }
+
     def was_break_completed_recently(self, seconds: int = 5) -> bool:
         if not self._last_break_completed_at:
             return False

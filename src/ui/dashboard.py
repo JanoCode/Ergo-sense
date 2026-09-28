@@ -575,7 +575,9 @@ class DashboardWidget(QWidget):
             sessions = self.session_service.get_user_sessions(active_user.id)
             self.lbl_session_count.setText(f"Sesiones registradas: {len(sessions)}")
             if not sessions:
-                self._show_empty_history_message("No hay sesiones registradas.")
+                self._show_empty_history_message(
+                    "Todavía no hay sesiones registradas."
+                )
             else:
                 for session in sessions:
                     session_widget = self._create_session_widget(session)

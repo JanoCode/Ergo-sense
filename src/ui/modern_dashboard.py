@@ -23,9 +23,11 @@ class ModernDashboardWidget(DashboardWidget):
     """Presentation-only redesign built on the existing dashboard behavior."""
 
     PAGE_HOME = 0
-    PAGE_MONITORING = 1
+    PAGE_WELLBEING = 1
+    PAGE_MONITORING = PAGE_WELLBEING
     PAGE_HISTORY = 2
-    PAGE_TRENDS = 3
+    PAGE_SETTINGS = 3
+    PAGE_TRENDS = PAGE_SETTINGS
     PAGE_USERS = 4
 
     def _setup_ui(self):
@@ -66,7 +68,7 @@ class ModernDashboardWidget(DashboardWidget):
 
         self.nav_buttons = []
         for index, label in enumerate(
-            ("Inicio", "Monitoreo", "Historial", "Tendencias", "Usuarios")
+            ("Inicio", "Bienestar", "Historial", "Configuración", "Usuarios")
         ):
             button = QPushButton(label)
             button.setObjectName("navButton")
@@ -87,7 +89,7 @@ class ModernDashboardWidget(DashboardWidget):
         page, layout = self._page("Inicio", "Tu estado de un vistazo")
 
         self.home_empty = self._empty_state(
-            "Selecciona o crea un usuario para comenzar",
+            "Selecciona o crea un usuario para comenzar.",
             "Tus sesiones y resultados se guardarán de forma independiente.",
         )
         go_users = QPushButton("Ir a usuarios")
@@ -108,7 +110,7 @@ class ModernDashboardWidget(DashboardWidget):
         self.lbl_home_user.setObjectName("sectionTitle")
         self.lbl_status = QLabel("Sin sesión")
         self.lbl_status.setObjectName("statusText")
-        self.lbl_baseline_status = QLabel("Baseline no iniciado")
+        self.lbl_baseline_status = QLabel("")
         self.lbl_baseline_status.setObjectName("mutedText")
         self.lbl_session_count = QLabel("Sesiones registradas: 0")
         self.lbl_session_count.setObjectName("mutedText")
@@ -120,7 +122,7 @@ class ModernDashboardWidget(DashboardWidget):
         fatigue = self._card()
         self.home_fatigue_card = fatigue
         fatigue_layout = QVBoxLayout(fatigue)
-        fatigue_title = QLabel("Fatiga actual")
+        fatigue_title = QLabel("Estado de descanso")
         fatigue_title.setObjectName("eyebrow")
         self.lbl_home_score = QLabel("---")
         self.lbl_home_score.setObjectName("heroScore")
@@ -128,12 +130,12 @@ class ModernDashboardWidget(DashboardWidget):
         self.home_score_bar.setRange(0, 100)
         self.home_score_bar.setValue(0)
         self.home_score_bar.setTextVisible(False)
-        self.lbl_home_level = QLabel("Nivel: sin evaluación")
+        self.lbl_home_level = QLabel("En buen ritmo")
         self.lbl_home_level.setObjectName("sectionTitle")
         fatigue_layout.addWidget(fatigue_title)
-        fatigue_layout.addWidget(self.lbl_home_score)
-        fatigue_layout.addWidget(self.home_score_bar)
         fatigue_layout.addWidget(self.lbl_home_level)
+        self.lbl_home_score.setVisible(False)
+        self.home_score_bar.setVisible(False)
 
         cards = QGridLayout()
         self.home_cards_layout = cards
@@ -287,11 +289,11 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _build_monitoring(self):
         page, layout = self._page(
-            "Monitoreo", "Seguimiento en tiempo real durante la sesión"
+            "Bienestar", "Tu ciclo de trabajo y pausas durante la sesión"
         )
         self.monitoring_empty = self._empty_state(
-            "No hay una sesión activa",
-            "Inicia el monitoreo desde Inicio cuando estés listo.",
+            "Inicia una sesión para comenzar a registrar tu tiempo de uso.",
+            "Desde Inicio puedes comenzar cuando estés listo.",
         )
         go_home = QPushButton("Volver a Inicio")
         go_home.setObjectName("secondaryButton")
@@ -334,23 +336,35 @@ class ModernDashboardWidget(DashboardWidget):
         self.monitor_score_card = score_card
         score_layout = QVBoxLayout(score_card)
         score_layout.setAlignment(Qt.AlignTop)
-        title = QLabel("Fatiga actual")
+        title = QLabel("Estado de descanso")
         title.setObjectName("eyebrow")
         self.lbl_fatigue_score = QLabel("--- / 100")
         self.lbl_fatigue_score.setObjectName("monitorScore")
-        self.lbl_fatigue_level = QLabel("Nivel: sin evaluación")
+        self.lbl_fatigue_level = QLabel("En buen ritmo")
         self.lbl_fatigue_level.setObjectName("stateBadge")
         self.lbl_fatigue_confidence = QLabel("Confianza: ---")
         self.lbl_fatigue_confidence.setObjectName("mutedText")
         self.lbl_monitor_time = QLabel("00:00:00")
         self.lbl_monitor_time.setObjectName("sessionTime")
-        self.btn_monitor_end = QPushButton("Finalizar monitoreo")
+        self.btn_monitor_end = QPushButton("Finalizar sesión")
         self.btn_monitor_end.setObjectName("dangerButton")
         self.btn_monitor_end.clicked.connect(lambda: self._end_session())
         for widget in (
             title, self.lbl_fatigue_score, self.lbl_fatigue_level,
             self.lbl_fatigue_confidence, self.lbl_monitor_time,
             self.btn_monitor_end,
+        ):
+            score_layout.addWidget(widget)
+        self.lbl_monitor_continuous = QLabel("Uso continuo: 00:00:00")
+        self.lbl_monitor_continuous.setObjectName("sessionTime")
+        self.lbl_monitor_next_break = QLabel("Próxima pausa en: -- min")
+        self.lbl_monitor_next_break.setObjectName("mutedText")
+        self.lbl_monitor_breaks = QLabel("Aún no has realizado pausas en esta sesión.")
+        self.lbl_monitor_breaks.setObjectName("mutedText")
+        for widget in (
+            self.lbl_monitor_continuous,
+            self.lbl_monitor_next_break,
+            self.lbl_monitor_breaks,
         ):
             score_layout.addWidget(widget)
         self.lbl_current_state = QLabel("Estado actual · esperando evaluación")
@@ -439,7 +453,7 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _build_history(self):
         page, layout = self._page(
-            "Historial", "Consulta y compara tus sesiones anteriores"
+            "Historial", "Revisa tus sesiones y hábitos de descanso"
         )
         content = QHBoxLayout()
         content.setSpacing(16)
@@ -459,7 +473,7 @@ class ModernDashboardWidget(DashboardWidget):
         detail_title = QLabel("Detalle de sesión")
         detail_title.setObjectName("sectionTitle")
         self.lbl_session_detail = QLabel(
-            "Selecciona una sesión para consultar sus métricas."
+            "Selecciona una sesión para consultar sus pausas y tiempos."
         )
         self.lbl_session_detail.setWordWrap(True)
         self.lbl_session_detail.setAlignment(Qt.AlignTop)
@@ -472,8 +486,32 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _build_trends(self):
         page, layout = self._page(
-            "Tendencias", "Evolución basada exclusivamente en sesiones guardadas"
+            "Configuración", "Intervalos del ciclo de trabajo y pausas"
         )
+        from app import config
+
+        settings = self._card()
+        settings_layout = QVBoxLayout(settings)
+        settings_title = QLabel("Configuración de bienestar")
+        settings_title.setObjectName("sectionTitle")
+        settings_text = QLabel(
+            f"Pausa recomendada cada {config.RECOMMENDED_BREAK_INTERVAL_MINUTES} min\n"
+            f"Aviso previo: {config.BREAK_WARNING_ADVANCE_MINUTES} min\n"
+            f"Duración sugerida: {config.SUGGESTED_BREAK_DURATION_MINUTES} min\n"
+            f"Recordar después: {config.POSTPONE_TIME_MINUTES} min"
+        )
+        settings_text.setWordWrap(True)
+        settings_text.setObjectName("mutedText")
+        settings_note = QLabel(
+            "Estos valores definen los recordatorios y el temporizador de pausa."
+        )
+        settings_note.setWordWrap(True)
+        settings_note.setObjectName("mutedText")
+        settings_layout.addWidget(settings_title)
+        settings_layout.addWidget(settings_text)
+        settings_layout.addWidget(settings_note)
+        layout.addWidget(settings)
+
         overview = QGridLayout()
         self.trends_overview_layout = overview
         overview.setSpacing(12)
@@ -493,6 +531,12 @@ class ModernDashboardWidget(DashboardWidget):
         layout.addLayout(overview)
         layout.addWidget(self.lbl_analytics_comparison)
         layout.addWidget(self.lbl_analytics_sessions)
+        for widget in (
+            self.lbl_analytics_score, self.lbl_analytics_score_30,
+            self.lbl_analytics_moderate, self.lbl_analytics_trend,
+            self.lbl_analytics_comparison, self.lbl_analytics_sessions,
+        ):
+            widget.setVisible(False)
 
         self.chart_score = self._create_chart_view()
         self.chart_moderate = self._create_chart_view()
@@ -504,6 +548,9 @@ class ModernDashboardWidget(DashboardWidget):
         charts.addWidget(self.chart_moderate, 1, 0)
         charts.addWidget(self.chart_perclos, 1, 1)
         layout.addLayout(charts)
+        self.chart_score.setVisible(False)
+        self.chart_moderate.setVisible(False)
+        self.chart_perclos.setVisible(False)
 
         insights = self._card()
         insights_layout = QVBoxLayout(insights)
@@ -516,11 +563,13 @@ class ModernDashboardWidget(DashboardWidget):
         insights_layout.addWidget(insights_title)
         insights_layout.addWidget(self.lbl_longitudinal_insights)
         layout.addWidget(insights)
+        insights.setVisible(False)
+        layout.addStretch()
         return page
 
     def _build_users(self):
         page, layout = self._page(
-            "Usuarios", "Cada perfil mantiene su propio baseline e historial"
+            "Usuarios", "Cada perfil mantiene sus propias sesiones y pausas"
         )
         header = QHBoxLayout()
         active = QLabel("Selecciona el perfil que utilizará la aplicación")
@@ -592,57 +641,29 @@ class ModernDashboardWidget(DashboardWidget):
         self.monitoring_content.setVisible(active)
         self.btn_monitor_end.setVisible(active)
         
-        from app import config
-        if not config.ENABLE_ADVANCED_FATIGUE_MONITORING:
-            self.home_fatigue_card.setVisible(False)
-            self.monitor_video_card.setVisible(False)
-            
-            for widget in (
-                self.lbl_fatigue_score, self.lbl_fatigue_level,
-                self.lbl_fatigue_confidence, self.lbl_current_state,
-                self.monitor_score_bar, self.lbl_recommendation,
-                self.lbl_reasons, self.lbl_metric_context,
-                self.landmarks_toggle, self.lbl_yawn_feedback
-            ):
-                widget.setVisible(False)
-                
-            for widget in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev):
-                widget.setVisible(False)
-                
-            self.advanced_toggle.setVisible(False)
-            self.metrics_container.setVisible(False)
-            
-            # Update title in monitoring view to reflect simple session
-            if hasattr(self, 'monitor_score_card'):
-                # The title "Fatiga actual" is the first child of score_layout. We could hide it but it's hard to find easily, so we just let it be or find it.
-                pass
-        else:
-            self.home_fatigue_card.setVisible(True)
-            self.monitor_video_card.setVisible(True)
-            for widget in (
-                self.lbl_fatigue_score, self.lbl_fatigue_level,
-                self.lbl_fatigue_confidence, self.lbl_current_state,
-                self.monitor_score_bar, self.lbl_recommendation,
-                self.lbl_reasons, self.landmarks_toggle, self.lbl_yawn_feedback
-            ):
-                widget.setVisible(True)
-            for widget in (self.lbl_perclos_60s, self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev):
-                widget.setVisible(True)
-            self.advanced_toggle.setVisible(True)
+        self.home_fatigue_card.setVisible(True)
+        self.monitor_video_card.setVisible(False)
+        for widget in (
+            self.lbl_fatigue_score, self.lbl_fatigue_confidence,
+            self.lbl_current_state, self.monitor_score_bar,
+            self.lbl_recommendation, self.lbl_reasons,
+            self.lbl_metric_context, self.landmarks_toggle,
+            self.lbl_yawn_feedback, self.lbl_perclos_60s,
+            self.lbl_bpm, self.lbl_yawns, self.lbl_head_dev,
+        ):
+            widget.setVisible(False)
+        self.lbl_fatigue_level.setVisible(True)
+        self.advanced_toggle.setVisible(False)
+        self.metrics_container.setVisible(False)
 
         if active:
-            if not config.ENABLE_ADVANCED_FATIGUE_MONITORING:
-                self.lbl_status.setText("Sesión de bienestar activa")
-            else:
-                baseline_state = (
-                    self.baseline_service.get_state() if self.baseline_service else None
-                )
-                if baseline_state and baseline_state.value != "READY":
-                    self.lbl_status.setText("Calibrando · monitoreo activo")
-                else:
-                    self.lbl_status.setText("Monitoreando")
+            self.lbl_status.setText("Trabajando")
         else:
             self.lbl_status.setText("Sin sesión")
+            self.lbl_home_level.setText("Sin sesión activa")
+            self.lbl_fatigue_level.setText("Sin sesión activa")
+            self.lbl_monitor_continuous.setText("Uso continuo: 00:00:00")
+            self.lbl_monitor_next_break.setText("Próxima pausa en: -- min")
 
     def _update_active_user_display(self):
         super()._update_active_user_display()
@@ -652,8 +673,7 @@ class ModernDashboardWidget(DashboardWidget):
         self._update_session_ui_state()
 
     def _update_baseline_label(self):
-        super()._update_baseline_label()
-        self.lbl_baseline_status.setStyleSheet("")
+        self.lbl_baseline_status.setText("")
 
     def _create_user_widget(self, user):
         card = self._card()
@@ -750,6 +770,45 @@ class ModernDashboardWidget(DashboardWidget):
         from wellbeing.models import CycleState
         cycle = self.wellbeing_service.get_cycle_state()
 
+        labels = {
+            CycleState.WORKING: "En buen ritmo",
+            CycleState.BREAK_DUE_SOON: "Pausa próxima",
+            CycleState.BREAK_DUE: "Es momento de una pausa",
+            CycleState.BREAKING: "Pausa en curso",
+        }
+        state_label = labels[cycle]
+        self.lbl_home_level.setText(state_label)
+        self.lbl_fatigue_level.setText(state_label)
+        self.lbl_status.setText(
+            {
+                CycleState.WORKING: "Trabajando",
+                CycleState.BREAK_DUE_SOON: "Pausa recomendada pronto",
+                CycleState.BREAK_DUE: "Pausa recomendada",
+                CycleState.BREAKING: "En pausa",
+            }[cycle]
+        )
+
+        state = self.wellbeing_service.get_state()
+        if state:
+            continuous = state.continuous_usage_seconds
+            self.lbl_monitor_continuous.setText(
+                f"Uso continuo: {continuous // 3600:02d}:"
+                f"{continuous % 3600 // 60:02d}:{continuous % 60:02d}"
+            )
+            if state.completed_breaks:
+                self.lbl_monitor_breaks.setText(
+                    f"Pausas realizadas en esta sesión: {state.completed_breaks}"
+                )
+            else:
+                self.lbl_monitor_breaks.setText(
+                    "Aún no has realizado pausas en esta sesión."
+                )
+
+        until_break = self.wellbeing_service.get_time_until_next_break()
+        self.lbl_monitor_next_break.setText(
+            f"Próxima pausa en: {max(1, until_break // 60)} min"
+        )
+
         if cycle == CycleState.BREAKING:
             self.break_reminder_card.setVisible(False)
             self.breaking_card.setVisible(True)
@@ -769,6 +828,9 @@ class ModernDashboardWidget(DashboardWidget):
                 self._set_break_recommendations()
             self.lbl_break_completed.setVisible(False)
             self.lbl_break_info.setVisible(False)
+            self.lbl_continuous_usage.setVisible(False)
+            self.lbl_monitor_continuous.setVisible(False)
+            self.lbl_monitor_next_break.setVisible(False)
         elif cycle == CycleState.BREAK_DUE:
             self.breaking_card.setVisible(False)
             if self.wellbeing_service.is_reminder_active() or self.wellbeing_service.should_show_reminder():
@@ -792,6 +854,9 @@ class ModernDashboardWidget(DashboardWidget):
             self._reminder_recommendation_visible = False
             if cycle != CycleState.BREAKING:
                 self._recommendation_break_key = None
+            self.lbl_continuous_usage.setVisible(True)
+            self.lbl_monitor_continuous.setVisible(True)
+            self.lbl_monitor_next_break.setVisible(True)
 
     def _on_start_break(self):
         if self.wellbeing_service:
@@ -920,7 +985,6 @@ class ModernDashboardWidget(DashboardWidget):
         self.home_score_bar.setStyleSheet(
             f"QProgressBar::chunk {{ background: {color}; border-radius: 5px; }}"
         )
-        self.lbl_home_score.setText(f"{value} / 100" if digits else "---")
         if digits:
             self.lbl_fatigue_score.setText(f"{value} / 100")
         level_text = self.lbl_fatigue_level.text()
@@ -934,7 +998,6 @@ class ModernDashboardWidget(DashboardWidget):
         for source, target in translations.items():
             level_text = level_text.replace(source, target)
         self.lbl_fatigue_level.setText(level_text)
-        self.lbl_home_level.setText(level_text)
 
     def _create_session_widget(self, session):
         widget = self._card()
@@ -949,13 +1012,14 @@ class ModernDashboardWidget(DashboardWidget):
             minutes, seconds = divmod(remainder, 60)
             duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         summary = (
-            self.fatigue_history_service.get_summary(session.id)
-            if self.fatigue_history_service and session.id is not None else None
+            self.wellbeing_service.get_session_summary(session)
+            if self.wellbeing_service else None
         )
-        score = f"{summary.average_score:.1f}" if summary and summary.average_score is not None else "---"
-        level = summary.max_level.value if summary and summary.max_level else "---"
+        pauses = summary["completed_breaks"] if summary else 0
+        postponed = summary["postponed_breaks"] if summary else 0
         subtitle = QLabel(
-            f"Duración: {duration}   ·   Score promedio: {score}   ·   Nivel máximo: {level}"
+            f"Duración: {duration}   ·   Pausas: {pauses}   ·   "
+            f"Pospuestas: {postponed}"
         )
         subtitle.setObjectName("mutedText")
         subtitle.setWordWrap(True)
@@ -967,6 +1031,38 @@ class ModernDashboardWidget(DashboardWidget):
         button.clicked.connect(lambda _, value=session: self._show_session_detail(value))
         layout.addWidget(button)
         return widget
+
+    def _show_session_detail(self, session):
+        def duration(value):
+            if value is None:
+                return "---"
+            hours, remainder = divmod(int(value), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        summary = (
+            self.wellbeing_service.get_session_summary(session)
+            if self.wellbeing_service else None
+        ) or {
+            "completed_breaks": 0,
+            "postponed_breaks": 0,
+            "total_break_seconds": 0,
+            "max_continuous_usage_seconds": session.duration_seconds or 0,
+        }
+        date = (
+            session.started_at.strftime("%d/%m/%Y %H:%M")
+            if session.started_at else "---"
+        )
+        self.lbl_session_detail.setText(
+            f"Fecha: {date}\n"
+            f"Duración de sesión: {duration(session.duration_seconds)}\n"
+            f"Pausas realizadas: {summary['completed_breaks']}\n"
+            f"Pausas pospuestas: {summary['postponed_breaks']}\n"
+            f"Mayor tramo de uso continuo: "
+            f"{duration(summary['max_continuous_usage_seconds'])}\n"
+            f"Tiempo total de pausas: "
+            f"{duration(summary['total_break_seconds'])}"
+        )
 
     @staticmethod
     def _page(title, subtitle):

@@ -9,7 +9,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.camera_service = camera_service
-        self.setWindowTitle("ErgoSense - Monitoreo de Fatiga")
+        self.setWindowTitle("ErgoSense - Bienestar digital")
         self.setMinimumSize(760, 560)
         self.resize(1180, 760)
         
