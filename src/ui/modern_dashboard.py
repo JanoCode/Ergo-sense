@@ -181,8 +181,16 @@ class ModernDashboardWidget(DashboardWidget):
             "font-size: 14px; color: #bf360c; border: none; background: transparent;"
         )
         self.lbl_reminder_body.setAlignment(Qt.AlignCenter)
+        self.lbl_reminder_tip = QLabel("")
+        self.lbl_reminder_tip.setWordWrap(True)
+        self.lbl_reminder_tip.setAlignment(Qt.AlignCenter)
+        self.lbl_reminder_tip.setStyleSheet(
+            "font-size: 13px; color: #7a3e00; border: none; "
+            "background: transparent;"
+        )
         reminder_layout.addWidget(self.lbl_reminder_title)
         reminder_layout.addWidget(self.lbl_reminder_body)
+        reminder_layout.addWidget(self.lbl_reminder_tip)
 
         reminder_actions = QHBoxLayout()
         reminder_actions.addStretch()
@@ -229,9 +237,24 @@ class ModernDashboardWidget(DashboardWidget):
         self.btn_finish_break.setObjectName("secondaryButton")
         self.btn_finish_break.setMinimumHeight(40)
         self.btn_finish_break.clicked.connect(self._on_finish_break)
+        self.lbl_break_suggestions_title = QLabel("Sugerencias para esta pausa")
+        self.lbl_break_suggestions_title.setStyleSheet(
+            "font-size: 14px; font-weight: bold; color: #2e7d32; "
+            "border: none; background: transparent;"
+        )
+        self.lbl_break_suggestions_title.setAlignment(Qt.AlignCenter)
+        self.lbl_break_suggestions = QLabel("")
+        self.lbl_break_suggestions.setWordWrap(True)
+        self.lbl_break_suggestions.setAlignment(Qt.AlignCenter)
+        self.lbl_break_suggestions.setStyleSheet(
+            "font-size: 13px; color: #326b36; border: none; "
+            "background: transparent;"
+        )
         breaking_layout.addWidget(self.lbl_breaking_title)
         breaking_layout.addWidget(self.lbl_breaking_since)
         breaking_layout.addWidget(self.lbl_break_timer)
+        breaking_layout.addWidget(self.lbl_break_suggestions_title)
+        breaking_layout.addWidget(self.lbl_break_suggestions)
         breaking_layout.addWidget(self.btn_finish_break, alignment=Qt.AlignCenter)
         self.breaking_card.setVisible(False)
         content.addWidget(self.breaking_card)
@@ -741,6 +764,9 @@ class ModernDashboardWidget(DashboardWidget):
                 f"{remaining // 60:02d}:{remaining % 60:02d} restantes · "
                 f"{elapsed // 60:02d}:{elapsed % 60:02d} transcurridos"
             )
+            if started != self._recommendation_break_key:
+                self._recommendation_break_key = started
+                self._set_break_recommendations()
             self.lbl_break_completed.setVisible(False)
             self.lbl_break_info.setVisible(False)
         elif cycle == CycleState.BREAK_DUE:
@@ -753,6 +779,9 @@ class ModernDashboardWidget(DashboardWidget):
                         f"Llevas {mins} minutos de uso continuo."
                     )
                 self.break_reminder_card.setVisible(True)
+                if not self._reminder_recommendation_visible:
+                    self._set_reminder_recommendation()
+                    self._reminder_recommendation_visible = True
             self.lbl_break_info.setVisible(False)
         else:
             self.break_reminder_card.setVisible(False)
@@ -760,6 +789,9 @@ class ModernDashboardWidget(DashboardWidget):
             self.lbl_break_completed.setVisible(
                 self.wellbeing_service.was_break_completed_recently()
             )
+            self._reminder_recommendation_visible = False
+            if cycle != CycleState.BREAKING:
+                self._recommendation_break_key = None
 
     def _on_start_break(self):
         if self.wellbeing_service:
@@ -773,6 +805,48 @@ class ModernDashboardWidget(DashboardWidget):
     def _on_finish_break(self):
         if self.wellbeing_service:
             self.wellbeing_service.complete_break()
+
+    def _recommendation_context(self, break_active=False):
+        from app import config
+        from wellbeing.recommendations import RecommendationContext
+
+        state = self.wellbeing_service.get_state()
+        return RecommendationContext(
+            continuous_usage_seconds=(
+                state.continuous_usage_seconds if state else 0
+            ),
+            break_active=break_active,
+            break_duration_seconds=(
+                config.SUGGESTED_BREAK_DURATION_MINUTES * 60
+            ),
+            completed_breaks=state.completed_breaks if state else 0,
+            postponed_breaks=state.postponed_breaks if state else 0,
+        )
+
+    def _set_reminder_recommendation(self):
+        if not self.recommendation_service:
+            self.lbl_reminder_tip.setText(
+                "Una pausa breve puede ayudarte a descansar la vista "
+                "y cambiar de postura."
+            )
+            return
+        selected = self.recommendation_service.select(
+            self._recommendation_context(), limit=1
+        )
+        self.lbl_reminder_tip.setText(selected[0].text)
+
+    def _set_break_recommendations(self):
+        if not self.recommendation_service:
+            self.lbl_break_suggestions.setText("")
+            self.lbl_break_suggestions_title.setVisible(False)
+            return
+        selected = self.recommendation_service.select(
+            self._recommendation_context(break_active=True), limit=2
+        )
+        self.lbl_break_suggestions_title.setVisible(True)
+        self.lbl_break_suggestions.setText(
+            "\n".join(f"• {item.text}" for item in selected)
+        )
 
     def _reset_fatigue_ui(self):
         super()._reset_fatigue_ui()
