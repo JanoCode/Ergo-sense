@@ -13,6 +13,8 @@ permite posponerla y conserva un historial simple por usuario.
 - Recomendaciones breves de autocuidado durante los descansos.
 - Historial de sesiones, pausas y estadísticas de 7 y 30 días.
 - Gráficos de tiempo de uso y pausas por día.
+- Recuperación al iniciar de sesiones o pausas que quedaron abiertas tras un
+  cierre inesperado.
 
 ## Arquitectura
 
@@ -28,6 +30,11 @@ El proyecto utiliza una arquitectura de monolito modular y una base SQLite compa
 
 Las tablas históricas de versiones anteriores se conservan por compatibilidad, pero
 no forman parte del flujo activo ni se eliminan durante la inicialización.
+
+En un cierre normal, la pausa activa y la sesión se guardan antes de salir. Si el
+proceso se interrumpe, el siguiente arranque las cierra de forma coherente usando
+la hora de recuperación; por ello, ese intervalo puede incluir tiempo durante el
+que la aplicación estuvo cerrada.
 
 ## Tecnologías
 

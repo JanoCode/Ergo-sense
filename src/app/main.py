@@ -16,6 +16,7 @@ from wellbeing.service import WellbeingService
 from wellbeing.repository import SQLiteBreakEventRepository
 from wellbeing.recommendations import WellbeingRecommendationService
 from wellbeing.analytics import WellbeingAnalyticsService
+from wellbeing.recovery import WellbeingRecoveryService
 
 def main():
     logging.basicConfig(
@@ -34,6 +35,15 @@ def main():
     session_service = SessionService(session_repo, user_service)
     
     break_event_repo = SQLiteBreakEventRepository(db_manager)
+    recovered_sessions, recovered_breaks = WellbeingRecoveryService(
+        session_repo, break_event_repo
+    ).recover()
+    if recovered_sessions or recovered_breaks:
+        logging.getLogger(__name__).info(
+            "Recovered %d interrupted sessions and %d active breaks",
+            recovered_sessions,
+            recovered_breaks,
+        )
     wellbeing_service = WellbeingService(session_service, break_event_repo)
     recommendation_service = WellbeingRecommendationService()
     wellbeing_analytics_service = WellbeingAnalyticsService(

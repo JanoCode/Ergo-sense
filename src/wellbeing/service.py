@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 
 from wellbeing.models import (
     BreakCompletionType,
@@ -14,7 +14,12 @@ from app import config
 
 
 class WellbeingService:
-    def __init__(self, session_service: SessionService, break_repository=None):
+    def __init__(
+        self,
+        session_service: SessionService,
+        break_repository=None,
+        now_provider: Callable[[], datetime] = datetime.now,
+    ):
         self.session_service = session_service
         self.break_repository = break_repository
         self._state: Optional[WellbeingSessionState] = None
@@ -24,6 +29,7 @@ class WellbeingService:
         self._next_reminder_at: Optional[datetime] = None
         self._active_break: Optional[WellbeingBreak] = None
         self._last_break_completed_at: Optional[datetime] = None
+        self._now = now_provider
         register_callback = getattr(
             self.session_service, "add_before_end_callback", None
         )
@@ -260,5 +266,4 @@ class WellbeingService:
         return completed
 
     def _get_current_time(self) -> datetime:
-        """Wrapper around datetime.now() to allow mocking in tests."""
-        return datetime.now()
+        return self._now()

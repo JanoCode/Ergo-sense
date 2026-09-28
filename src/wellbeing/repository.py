@@ -92,6 +92,15 @@ class SQLiteBreakEventRepository:
             ).fetchone()
             return self._row_to_break(row) if row else None
 
+    def get_active_breaks(self) -> List[WellbeingBreak]:
+        """Return every break left open by an interrupted application run."""
+        with closing(self.db_manager.get_connection()) as conn:
+            rows = conn.execute(
+                """SELECT * FROM wellbeing_breaks
+                   WHERE ended_at IS NULL ORDER BY started_at"""
+            ).fetchall()
+            return [self._row_to_break(row) for row in rows]
+
     def get_breaks_by_session(self, session_id: int) -> List[WellbeingBreak]:
         with closing(self.db_manager.get_connection()) as conn:
             rows = conn.execute(

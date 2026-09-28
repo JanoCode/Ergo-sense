@@ -48,3 +48,21 @@ class SQLiteSessionRepository:
                     duration_seconds=row["duration_seconds"]
                 ))
         return sessions
+
+    def get_open_sessions(self) -> List[Session]:
+        """Return sessions left open by an interrupted application run."""
+        with self.db.get_connection() as conn:
+            rows = conn.execute(
+                """SELECT id, user_id, started_at, ended_at, duration_seconds
+                   FROM sessions WHERE ended_at IS NULL ORDER BY started_at"""
+            ).fetchall()
+        return [
+            Session(
+                id=row["id"],
+                user_id=row["user_id"],
+                started_at=datetime.fromisoformat(row["started_at"]),
+                ended_at=None,
+                duration_seconds=row["duration_seconds"],
+            )
+            for row in rows
+        ]

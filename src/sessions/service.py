@@ -4,11 +4,17 @@ from sessions.models import Session
 from users.service import UserService
 
 class SessionService:
-    def __init__(self, session_repository, user_service: UserService):
+    def __init__(
+        self,
+        session_repository,
+        user_service: UserService,
+        now_provider: Callable[[], datetime] = datetime.now,
+    ):
         self.session_repository = session_repository
         self.user_service = user_service
         self._active_session: Optional[Session] = None
         self._before_end_callbacks: List[Callable[[], None]] = []
+        self._now = now_provider
 
     def add_before_end_callback(self, callback: Callable[[], None]) -> None:
         self._before_end_callbacks.append(callback)
@@ -21,7 +27,7 @@ class SessionService:
         if not user:
             raise ValueError("No hay usuario activo para iniciar sesión.")
             
-        session = Session(user_id=user.id, started_at=datetime.now())
+        session = Session(user_id=user.id, started_at=self._now())
         self._active_session = self.session_repository.save(session)
         return self._active_session
 
@@ -33,7 +39,7 @@ class SessionService:
             callback()
             
         session = self._active_session
-        session.ended_at = datetime.now()
+        session.ended_at = self._now()
         session.duration_seconds = int((session.ended_at - session.started_at).total_seconds())
         
         self.session_repository.save(session)
