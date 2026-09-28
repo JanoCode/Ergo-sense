@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 class DashboardWidget(QWidget):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
                  face_analyzer=None, baseline_service=None,
-                 fatigue_history_service=None, fatigue_analytics_service=None):
+                 fatigue_history_service=None, fatigue_analytics_service=None,
+                 wellbeing_service=None):
         super().__init__()
         self.user_service = user_service
         self.session_service = session_service
@@ -34,6 +35,7 @@ class DashboardWidget(QWidget):
         self.baseline_service = baseline_service
         self.fatigue_history_service = fatigue_history_service
         self.fatigue_analytics_service = fatigue_analytics_service
+        self.wellbeing_service = wellbeing_service
         self.blink_detector = BlinkDetector()
         self.perclos_calc = PerclosCalculator()
         self.prolonged_detector = ProlongedClosureDetector()
@@ -129,10 +131,21 @@ class DashboardWidget(QWidget):
         self.lbl_status.setStyleSheet("font-size: 16px; color: #7f8c8d; border: none;")
         status_layout.addWidget(self.lbl_status)
         
-        self.lbl_elapsed = QLabel("Transcurrido: 00:00:00")
+        self.lbl_elapsed = QLabel("Sesión: 00:00:00")
         self.lbl_elapsed.setStyleSheet("font-size: 14px; color: #7f8c8d; border: none;")
         self.lbl_elapsed.setVisible(False)
         status_layout.addWidget(self.lbl_elapsed)
+        
+        self.lbl_continuous_usage = QLabel("Uso continuo: 00:00:00")
+        self.lbl_continuous_usage.setStyleSheet("font-size: 14px; color: #7f8c8d; border: none;")
+        self.lbl_continuous_usage.setVisible(False)
+        status_layout.addWidget(self.lbl_continuous_usage)
+        
+        self.lbl_break_info = QLabel("Próxima pausa recomendada en: -- min")
+        self.lbl_break_info.setStyleSheet("font-size: 14px; color: #e67e22; border: none; font-weight: bold;")
+        self.lbl_break_info.setVisible(False)
+        self.lbl_break_info.setWordWrap(True)
+        status_layout.addWidget(self.lbl_break_info)
         
         status_layout.addSpacing(10)
         
@@ -787,8 +800,10 @@ class DashboardWidget(QWidget):
             self.btn_start_session.setEnabled(active_user is not None)
             self.lbl_status.setText("Inactivo")
             self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 16px; border: none;")
-            self.lbl_elapsed.setText("Transcurrido: 00:00:00")
+            self.lbl_elapsed.setText("Sesión: 00:00:00")
             self.lbl_elapsed.setVisible(False)
+            self.lbl_continuous_usage.setVisible(False)
+            self.lbl_break_info.setVisible(False)
             
         from app import config
         if not config.ENABLE_ADVANCED_FATIGUE_MONITORING:
@@ -810,11 +825,36 @@ class DashboardWidget(QWidget):
         if not self.session_service: return
         session = self.session_service.get_active_session()
         if session and session.started_at:
-            elapsed = datetime.now() - session.started_at
-            total_seconds = int(elapsed.total_seconds())
-            hours, remainder = divmod(total_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            self.lbl_elapsed.setText(f"Transcurrido: {hours:02d}:{minutes:02d}:{seconds:02d}")
+            if self.wellbeing_service:
+                state = self.wellbeing_service.get_state()
+                if state:
+                    # Update session total
+                    hours, remainder = divmod(state.session_elapsed_seconds, 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    self.lbl_elapsed.setText(f"Sesión: {hours:02d}:{minutes:02d}:{seconds:02d}")
+                    
+                    # Update continuous usage
+                    chours, cremainder = divmod(state.continuous_usage_seconds, 3600)
+                    cminutes, cseconds = divmod(cremainder, 60)
+                    self.lbl_continuous_usage.setText(f"Uso continuo: {chours:02d}:{cminutes:02d}:{cseconds:02d}")
+                    self.lbl_continuous_usage.setVisible(True)
+                    
+                    # Update break info
+                    from wellbeing.models import CycleState
+                    cycle = self.wellbeing_service.get_cycle_state()
+                    if cycle in (CycleState.BREAK_DUE, CycleState.BREAK_DUE_SOON):
+                        self.lbl_break_info.setText("Es un buen momento para hacer una pausa.")
+                    else:
+                        time_until = self.wellbeing_service.get_time_until_next_break()
+                        mins_until = max(1, time_until // 60)
+                        self.lbl_break_info.setText(f"Próxima pausa recomendada en: {mins_until} min")
+                    self.lbl_break_info.setVisible(True)
+            else:
+                elapsed = datetime.now() - session.started_at
+                total_seconds = int(elapsed.total_seconds())
+                hours, remainder = divmod(total_seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                self.lbl_elapsed.setText(f"Sesión: {hours:02d}:{minutes:02d}:{seconds:02d}")
 
     def _start_monitoring_worker(self):
         if self.monitoring_worker and self.monitoring_worker.isRunning():

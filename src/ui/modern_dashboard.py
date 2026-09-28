@@ -144,10 +144,23 @@ class ModernDashboardWidget(DashboardWidget):
         cards.setColumnStretch(1, 1)
         content.addLayout(cards)
 
-        self.lbl_elapsed = QLabel("Transcurrido: 00:00:00")
+        self.lbl_elapsed = QLabel("Sesión: 00:00:00")
         self.lbl_elapsed.setObjectName("sessionTime")
         self.lbl_elapsed.setAlignment(Qt.AlignCenter)
         content.addWidget(self.lbl_elapsed)
+        
+        self.lbl_continuous_usage = QLabel("Uso continuo: 00:00:00")
+        self.lbl_continuous_usage.setObjectName("sessionTime")
+        self.lbl_continuous_usage.setAlignment(Qt.AlignCenter)
+        self.lbl_continuous_usage.setVisible(False)
+        content.addWidget(self.lbl_continuous_usage)
+        
+        self.lbl_break_info = QLabel("Próxima pausa recomendada en: -- min")
+        self.lbl_break_info.setObjectName("sessionTime")
+        self.lbl_break_info.setStyleSheet("color: #e67e22; font-weight: bold;")
+        self.lbl_break_info.setAlignment(Qt.AlignCenter)
+        self.lbl_break_info.setVisible(False)
+        content.addWidget(self.lbl_break_info)
 
         actions = QHBoxLayout()
         actions.addStretch()
@@ -623,7 +636,7 @@ class ModernDashboardWidget(DashboardWidget):
 
     def _update_session_time(self):
         super()._update_session_time()
-        value = self.lbl_elapsed.text().replace("Transcurrido: ", "")
+        value = self.lbl_elapsed.text().replace("Sesión: ", "").replace("Transcurrido: ", "")
         self.lbl_monitor_time.setText(value)
 
     def _reset_fatigue_ui(self):

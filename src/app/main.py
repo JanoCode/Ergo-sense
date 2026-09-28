@@ -21,6 +21,7 @@ from fatigue.history_service import FatigueHistoryService
 from fatigue.analytics import (
     FatigueAnalyticsService, SQLiteFatigueAnalyticsRepository,
 )
+from wellbeing.service import WellbeingService
 
 def main():
     logging.basicConfig(
@@ -48,6 +49,7 @@ def main():
     fatigue_analytics_service = FatigueAnalyticsService(
         SQLiteFatigueAnalyticsRepository(db_manager)
     )
+    wellbeing_service = WellbeingService(session_service)
 
     app = QApplication(sys.path)
     
@@ -57,6 +59,7 @@ def main():
     window = MainWindow(
         user_service, session_service, camera_service, face_analyzer,
         baseline_service, fatigue_history_service, fatigue_analytics_service,
+        wellbeing_service,
     )
     app.aboutToQuit.connect(window.dashboard.shutdown)
     window.show()

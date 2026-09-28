@@ -4,7 +4,8 @@ from ui.modern_dashboard import ModernDashboardWidget
 class MainWindow(QMainWindow):
     def __init__(self, user_service=None, session_service=None, camera_service=None,
                  face_analyzer=None, baseline_service=None,
-                 fatigue_history_service=None, fatigue_analytics_service=None):
+                 fatigue_history_service=None, fatigue_analytics_service=None,
+                 wellbeing_service=None):
         super().__init__()
         
         self.camera_service = camera_service
@@ -24,6 +25,7 @@ class MainWindow(QMainWindow):
         self.dashboard = ModernDashboardWidget(
             user_service, session_service, camera_service, face_analyzer,
             baseline_service, fatigue_history_service, fatigue_analytics_service,
+            wellbeing_service,
         )
         self.main_layout.addWidget(self.dashboard)
 
